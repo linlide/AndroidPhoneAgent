@@ -1,6 +1,6 @@
 # iPhone Mirroring Agent
 
-The iPhone Mirroring Agent is a Python-based tool that uses Claude AI to automate interactions with a mirrored iPhone 12 Pro screen. It captures screenshots, analyzes them using Claude AI, and performs simulated touch operations based on AI-generated instructions.
+The iPhone Mirroring Agent is a Python-based tool that uses Claude AI to automate interactions with a mirrored iPhone screen. It captures screenshots, analyzes them using Claude AI, and performs simulated touch operations based on AI-generated instructions.
 
 ## Features
 
@@ -13,7 +13,7 @@ The iPhone Mirroring Agent is a Python-based tool that uses Claude AI to automat
 
 1. Clone this repository:
    ```
-   git clone https://github.com/molokai-ai/iPhoneMirroringAgent.git
+   git clone https://github.com/instapal-ai/iPhoneMirroringAgent.git
    cd iPhoneMirroringAgent
    ```
 
