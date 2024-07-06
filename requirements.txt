@@ -1,0 +1,2 @@
+anthropic==0.9.1
+pyautogui==0.9.54
