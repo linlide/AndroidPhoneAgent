@@ -4,10 +4,10 @@ import io
 from PIL import Image, ImageGrab, ImageDraw
 import time
 import base64
-import pywinctl as pwc
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap
 from constants import SYSTEM_PROMPT, TOOLS
+from utils import find_and_flash_iphone_mirroring_window
 
 class iPhoneMirroringAgent(QThread):
     update_log = pyqtSignal(str)
@@ -24,15 +24,16 @@ class iPhoneMirroringAgent(QThread):
         self.conversation = []
         self.task_description = ""
         self.cursor_position = (0, 0)
+        self.iphone_window = None
 
     def capture_screenshot(self):
         try:
-            iphone_windows = [w for w in pwc.getAllWindows() if 'iPhone Mirroring' in w.title]
-            if not iphone_windows:
-                raise Exception("iPhone Mirroring window not found")
+            if self.iphone_window is None:
+                self.iphone_window = find_and_flash_iphone_mirroring_window()
+                if self.iphone_window is None:
+                    raise Exception("iPhone Mirroring window not found")
             
-            window = iphone_windows[0]
-            left, top, right, bottom = window.box
+            left, top, right, bottom = self.iphone_window.box
 
             screenshot = ImageGrab.grab(bbox=(left, top, right, bottom))
             
@@ -41,11 +42,9 @@ class iPhoneMirroringAgent(QThread):
             max_size = (1600, 1600)
             screenshot.thumbnail(max_size, Image.LANCZOS)
             
-            # Get current cursor position relative to the iPhone window
             cursor_x, cursor_y = pyautogui.position()
             self.cursor_position = (cursor_x - left, cursor_y - top)
             
-            # Draw cursor on the screenshot
             draw = ImageDraw.Draw(screenshot)
             cursor_radius = 10
             cursor_color = "red"
@@ -53,7 +52,6 @@ class iPhoneMirroringAgent(QThread):
                           self.cursor_position[0] + cursor_radius, self.cursor_position[1] + cursor_radius],
                          outline=cursor_color, width=2)
             
-            # Draw crosshair
             line_length = 20
             draw.line([self.cursor_position[0] - line_length, self.cursor_position[1],
                        self.cursor_position[0] + line_length, self.cursor_position[1]],
