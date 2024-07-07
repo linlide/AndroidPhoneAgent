@@ -148,11 +148,11 @@ class iPhoneMirroringAgent(QThread):
             pyautogui.moveRel(xOffset=distance if direction == "right" else -distance, yOffset=0)
         elif direction in ["down", "up"]:
             pyautogui.moveRel(xOffset=0, yOffset=distance if direction == "down" else -distance)
-        return {"result": f"Cursor moved {direction} by {distance} pixels."}
+        return f"Cursor moved {direction} by {distance} pixels."
 
     def click_cursor(self):
         pyautogui.click()
-        return {"result": "Click performed successfully."}
+        return "Click performed successfully."
 
     def send_to_claude(self, screenshot_data, tool_use=None, tool_result=None):
         if len(self.conversation) >= self.max_messages:
@@ -164,28 +164,39 @@ class iPhoneMirroringAgent(QThread):
         content = []
         
         if tool_use and tool_result:
-            if isinstance(tool_result, str):
-                tool_result = {"result": tool_result}
             content.append({
                 "type": "tool_result",
                 "tool_use_id": tool_use.id,
-                "content": tool_result,
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"{tool_result}\nHere's the latest screenshot after running the tool for the task: {self.task_description}\nPlease analyze the image and suggest the next action."
+                    },
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": screenshot_data
+                        }
+                    }
+                ]
             })
-        
-        content.extend([
-            {
-                "type": "text",
-                "text": f"Here's the current screenshot for the task: {self.task_description}\nPlease analyze the image and suggest the next action."
-            },
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/jpeg",
-                    "data": screenshot_data
+        else:
+            content.extend([
+                {
+                    "type": "text",
+                    "text": f"Here's the current screenshot for the task: {self.task_description}\nPlease analyze the image and suggest the next action."
+                },
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": screenshot_data
+                    }
                 }
-            }
-        ])
+            ])
         
         self.conversation.append({
             "role": "user",
@@ -230,10 +241,8 @@ class iPhoneMirroringAgent(QThread):
                     status = tool_use.input["status"]
                     reason = tool_use.input["reason"]
                     if status == "completed":
-                        self.update_log.emit(f"Task completed successfully. Reason: {reason}")
                         self.task_completed.emit(True, reason)
                     else:
-                        self.update_log.emit(f"Task failed. Reason: {reason}")
                         self.task_completed.emit(False, reason)
                     break
                 
