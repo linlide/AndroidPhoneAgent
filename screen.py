@@ -1,14 +1,26 @@
+import os
 import io
 import base64
 import pyautogui
-from PIL import ImageGrab, ImageDraw
+from PIL import Image, ImageDraw
 from PyQt5.QtGui import QPixmap
+import time
 
 def capture_screenshot():
     try:
-        screenshot = ImageGrab.grab()
+        pyautogui.hotkey('command', 'shift', '3')
         
-        screenshot = screenshot.convert('RGB')
+        time.sleep(5)
+        
+        screenshots_folder = os.path.join(os.path.expanduser("~"), "Dropbox", "Screenshots")
+        screenshots = [f for f in os.listdir(screenshots_folder) if f.startswith("Screenshot")]
+        screenshots.sort(key=lambda x: os.path.getmtime(os.path.join(screenshots_folder, x)))
+        latest_screenshot_path = os.path.join(screenshots_folder, screenshots[-1])
+        
+        screenshot = Image.open(latest_screenshot_path)
+        
+        if screenshot.mode == 'RGBA':
+            screenshot = screenshot.convert('RGB')
         
         cursor_x, cursor_y = pyautogui.position()
         
