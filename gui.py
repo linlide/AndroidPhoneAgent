@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPu
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QPoint
 from agent import iPhoneMirroringAgent
-from utils import bring_window_to_front, find_and_flash_iphone_mirroring_window
+from utils import find_and_flash_iphone_mirroring_window
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -125,7 +125,6 @@ class MainWindow(QMainWindow):
         self.screenshot_label.setAlignment(Qt.AlignCenter)
         self.screenshot_layout.addWidget(self.screenshot_label)
         
-        # Add a stretching spacer to push the cursor position label to the bottom
         self.screenshot_layout.addItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
         
         self.cursor_position_label = QLabel("Cursor Position: N/A")
@@ -181,10 +180,10 @@ class MainWindow(QMainWindow):
         task_description = self.task_input.text()
 
         if api_key and task_description:
-            if bring_window_to_front("iPhone Mirroring"):
-                find_and_flash_iphone_mirroring_window()
-            else:
+            iphone_window = find_and_flash_iphone_mirroring_window()
+            if iphone_window is None:
                 self.update_log("iPhone Mirroring app not found or couldn't be brought to front.")
+                return
 
             self.agent = iPhoneMirroringAgent(api_key, model, max_tokens, temperature, max_messages)
             self.agent.update_log.connect(self.update_log)
@@ -192,6 +191,7 @@ class MainWindow(QMainWindow):
             self.agent.task_completed.connect(self.on_task_completed)
 
             self.agent.task_description = task_description
+            self.agent.iphone_window = iphone_window
             self.log_display.clear()
             self.update_log(f"Starting task: {task_description}")
             self.agent.start()
@@ -209,7 +209,6 @@ class MainWindow(QMainWindow):
         self.screenshot_label.setPixmap(scaled_pixmap)
         self.cursor_position_label.setText(f"Cursor Position: ({cursor_position[0]:.2f}, {cursor_position[1]:.2f})")
         
-        # Ensure the cursor position label is visible
         self.cursor_position_label.show()
 
     def on_task_completed(self, success, reason):
