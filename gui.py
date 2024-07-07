@@ -1,8 +1,9 @@
 import os
 import json
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                             QTextEdit, QLabel, QLineEdit, QFormLayout, QGroupBox, QStatusBar)
-from PyQt5.QtGui import QIcon
+                             QTextEdit, QLabel, QLineEdit, QFormLayout, QGroupBox, QStatusBar,
+                             QSpacerItem, QSizePolicy)
+from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtCore import Qt, QPoint
 from agent import iPhoneMirroringAgent
 
@@ -118,9 +119,18 @@ class MainWindow(QMainWindow):
     def create_screenshot_group(self):
         self.screenshot_group = QGroupBox("Current Screenshot")
         self.screenshot_layout = QVBoxLayout()
+        
         self.screenshot_label = QLabel()
         self.screenshot_label.setAlignment(Qt.AlignCenter)
         self.screenshot_layout.addWidget(self.screenshot_label)
+        
+        # Add a stretching spacer to push the cursor position label to the bottom
+        self.screenshot_layout.addItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        
+        self.cursor_position_label = QLabel("Cursor Position: N/A")
+        self.cursor_position_label.setAlignment(Qt.AlignBottom | Qt.AlignLeft)
+        self.screenshot_layout.addWidget(self.cursor_position_label)
+        
         self.screenshot_group.setLayout(self.screenshot_layout)
         self.right_layout.addWidget(self.screenshot_group, 1)
 
@@ -187,10 +197,14 @@ class MainWindow(QMainWindow):
     def update_log(self, message):
         self.log_display.append(message)
 
-    def update_screenshot(self, pixmap):
+    def update_screenshot(self, pixmap, cursor_position):
         label_width = self.screenshot_label.width()
         scaled_pixmap = pixmap.scaledToWidth(label_width, Qt.SmoothTransformation)
         self.screenshot_label.setPixmap(scaled_pixmap)
+        self.cursor_position_label.setText(f"Cursor Position: ({cursor_position[0]:.2f}, {cursor_position[1]:.2f})")
+        
+        # Ensure the cursor position label is visible
+        self.cursor_position_label.show()
 
     def on_task_completed(self, success, reason):
         self.start_button.setEnabled(True)
@@ -201,4 +215,4 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, 'screenshot_label') and self.screenshot_label.pixmap():
-            self.update_screenshot(self.screenshot_label.pixmap().copy())
+            self.update_screenshot(self.screenshot_label.pixmap().copy(), self.agent.cursor_position if self.agent else (0, 0))
