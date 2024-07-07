@@ -2,8 +2,8 @@ import os
 import json
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QTextEdit, QLabel, QLineEdit, QFormLayout, QGroupBox, QStatusBar,
-                             QSpacerItem, QSizePolicy)
-from PyQt5.QtGui import QIcon, QPixmap, QMouseEvent, QFont
+                             QSizePolicy)
+from PyQt5.QtGui import QIcon, QMouseEvent
 from PyQt5.QtCore import Qt, QPoint, QTimer
 import pyautogui
 from agent import iPhoneMirroringAgent
