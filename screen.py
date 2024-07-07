@@ -9,7 +9,7 @@ from PyQt5.QtGui import QPixmap
 
 def find_and_flash_iphone_mirroring_window():
     try:
-        iphone_windows = [w for w in pwc.getAllWindows() if 'iPhone Mirroring' in w.title]
+        iphone_windows = pwc.getWindowsWithTitle("iPhone Mirroring", condition=pwc.Re.CONTAINS)
         if not iphone_windows:
             raise Exception("iPhone Mirroring window not found")
         

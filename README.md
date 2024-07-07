@@ -12,6 +12,7 @@ The iPhone Mirroring Agent is a Python-based tool that uses Claude AI to automat
 - Configurable AI model parameters
 - User-friendly graphical interface for easy interaction and real-time feedback
 - Automatic flashing of the iPhone Mirroring app window when starting a task
+- Compatible with any iPhone model connected through the iPhone Mirroring macOS app
 
 ## Installation
 
@@ -69,10 +70,10 @@ The project is organized into multiple files for better modularity and maintaina
 
 ## Limitations
 
-- The script is designed for use with a mirrored iPhone 12 Pro screen. Other device models may require adjustments to the screen resolution and interaction parameters.
 - The effectiveness of the automation depends on the quality of the mirrored display and the complexity of the task.
 - The script relies on the Anthropic API, so an active internet connection is required.
 - The window flashing feature requires the iPhone Mirroring app to be running and visible on the screen.
+- The AI's ability to interact with the iPhone interface may vary depending on the specific app or task being performed.
 
 ## Contributing
 
