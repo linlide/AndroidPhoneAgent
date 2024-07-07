@@ -3,7 +3,7 @@ import time
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap
 from constants import SYSTEM_PROMPT, TOOLS
-from screen import capture_screenshot, move_cursor, click_cursor, find_and_flash_iphone_mirroring_window
+from screen import capture_screenshot, move_cursor, click_cursor
 
 class iPhoneMirroringAgent(QThread):
     update_log = pyqtSignal(str)
@@ -20,16 +20,10 @@ class iPhoneMirroringAgent(QThread):
         self.conversation = []
         self.task_description = ""
         self.cursor_position = (0, 0)
-        self.iphone_window = None
 
     def capture_screenshot(self):
         try:
-            if self.iphone_window is None:
-                self.iphone_window = find_and_flash_iphone_mirroring_window()
-                if self.iphone_window is None:
-                    raise Exception("iPhone Mirroring window not found")
-            
-            pixmap, screenshot_data, self.cursor_position = capture_screenshot(self.iphone_window)
+            pixmap, screenshot_data, self.cursor_position = capture_screenshot()
             self.update_screenshot.emit(pixmap, self.cursor_position)
             return screenshot_data, self.cursor_position
         except Exception as e:

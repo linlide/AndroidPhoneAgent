@@ -3,10 +3,28 @@ import json
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QTextEdit, QLabel, QLineEdit, QFormLayout, QGroupBox, QStatusBar,
                              QSpacerItem, QSizePolicy)
-from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import Qt, QPoint
+from PyQt5.QtGui import QIcon, QPixmap, QMouseEvent, QFont
+from PyQt5.QtCore import Qt, QPoint, QTimer
+import pyautogui
 from agent import iPhoneMirroringAgent
-from screen import find_and_flash_iphone_mirroring_window
+
+class ClickableLabel(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMouseTracking(True)
+        self.parent = parent
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if self.pixmap() and self.parent:
+            pixmap_size = self.pixmap().size()
+            label_size = self.size()
+            x_scale = pixmap_size.width() / label_size.width()
+            y_scale = pixmap_size.height() / label_size.height()
+
+            x = int(event.x() * x_scale)
+            y = int(event.y() * y_scale)
+            
+            self.parent.update_screenshot_cursor_position(x, y)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -65,6 +83,14 @@ class MainWindow(QMainWindow):
         self.max_messages_input.textChanged.connect(self.save_settings)
         self.task_input.textChanged.connect(self.save_settings)
 
+        # Set up timer for real-time cursor position updates
+        self.cursor_timer = QTimer(self)
+        self.cursor_timer.timeout.connect(self.update_cursor_position)
+        self.cursor_timer.start(100)  # Update every 100 ms
+
+        # Store the original screenshot pixmap
+        self.original_pixmap = None
+
     def init_ui(self):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -121,15 +147,16 @@ class MainWindow(QMainWindow):
         self.screenshot_group = QGroupBox("Current Screenshot")
         self.screenshot_layout = QVBoxLayout()
         
-        self.screenshot_label = QLabel()
+        self.screenshot_label = ClickableLabel(self)
         self.screenshot_label.setAlignment(Qt.AlignCenter)
+        self.screenshot_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.screenshot_layout.addWidget(self.screenshot_label)
         
-        self.screenshot_layout.addItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        self.screen_cursor_label = QLabel("Screen Cursor:     (    0,    0)")
+        self.screenshot_cursor_label = QLabel("Screenshot Cursor: (    0,    0)")
         
-        self.cursor_position_label = QLabel("Cursor Position: N/A")
-        self.cursor_position_label.setAlignment(Qt.AlignBottom | Qt.AlignLeft)
-        self.screenshot_layout.addWidget(self.cursor_position_label)
+        self.screenshot_layout.addWidget(self.screen_cursor_label)
+        self.screenshot_layout.addWidget(self.screenshot_cursor_label)
         
         self.screenshot_group.setLayout(self.screenshot_layout)
         self.right_layout.addWidget(self.screenshot_group, 1)
@@ -180,18 +207,12 @@ class MainWindow(QMainWindow):
         task_description = self.task_input.text()
 
         if api_key and task_description:
-            iphone_window = find_and_flash_iphone_mirroring_window()
-            if iphone_window is None:
-                self.update_log("iPhone Mirroring app not found or couldn't be brought to front.")
-                return
-
             self.agent = iPhoneMirroringAgent(api_key, model, max_tokens, temperature, max_messages)
             self.agent.update_log.connect(self.update_log)
             self.agent.update_screenshot.connect(self.update_screenshot)
             self.agent.task_completed.connect(self.on_task_completed)
 
             self.agent.task_description = task_description
-            self.agent.iphone_window = iphone_window
             self.log_display.clear()
             self.update_log(f"Starting task: {task_description}")
             self.agent.start()
@@ -204,12 +225,22 @@ class MainWindow(QMainWindow):
         self.log_display.append(message)
 
     def update_screenshot(self, pixmap, cursor_position):
-        label_width = self.screenshot_label.width()
-        scaled_pixmap = pixmap.scaledToWidth(label_width, Qt.SmoothTransformation)
-        self.screenshot_label.setPixmap(scaled_pixmap)
-        self.cursor_position_label.setText(f"Cursor Position: ({cursor_position[0]:.2f}, {cursor_position[1]:.2f})")
-        
-        self.cursor_position_label.show()
+        self.original_pixmap = pixmap
+        self.scale_and_set_pixmap()
+        self.update_cursor_position()
+
+    def scale_and_set_pixmap(self):
+        if self.original_pixmap:
+            label_width = self.screenshot_label.width()
+            scaled_pixmap = self.original_pixmap.scaledToWidth(label_width, Qt.SmoothTransformation)
+            self.screenshot_label.setPixmap(scaled_pixmap)
+
+    def update_cursor_position(self):
+        cursor_x, cursor_y = pyautogui.position()
+        self.screen_cursor_label.setText(f"Screen Cursor:     ({cursor_x:5d},{cursor_y:5d})")
+
+    def update_screenshot_cursor_position(self, x, y):
+        self.screenshot_cursor_label.setText(f"Screenshot Cursor: ({x:5d},{y:5d})")
 
     def on_task_completed(self, success, reason):
         self.start_button.setEnabled(True)
@@ -219,5 +250,4 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, 'screenshot_label') and self.screenshot_label.pixmap():
-            self.update_screenshot(self.screenshot_label.pixmap().copy(), self.agent.cursor_position if self.agent else (0, 0))
+        self.scale_and_set_pixmap()
