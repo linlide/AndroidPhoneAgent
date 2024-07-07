@@ -30,7 +30,7 @@ The iPhone Mirroring Agent is a Python-based tool that uses Claude AI to automat
 Run the script with the following command:
 
 ```
-python iphone_mirroring_agent.py
+python main.py
 ```
 
 This will launch the graphical user interface. Enter your Anthropic API key, configure the parameters, and provide a task description in the input fields. Click the "Start Task" button to begin the automation process.
@@ -40,11 +40,21 @@ This will launch the graphical user interface. Enter your Anthropic API key, con
 The application allows you to configure the following parameters through the GUI:
 
 - API Key: Your Anthropic API key
-- Model: The Claude AI model to use (default: "claude-3-sonnet-20240320")
+- Model: The Claude AI model to use (default: "claude-3-5-sonnet-20240620")
 - Max Tokens: Maximum number of tokens in Claude's response (default: 2048)
 - Temperature: Temperature for Claude's responses (0.0 to 1.0, default: 0.7)
 - Max Messages: Maximum number of messages in the conversation (default: 20)
 - Task Description: The task you want the agent to perform on the mirrored iPhone screen
+
+## Project Structure
+
+The project is organized into multiple files for better modularity and maintainability:
+
+- `main.py`: Entry point of the application
+- `gui.py`: Contains the MainWindow class and GUI-related code
+- `agent.py`: Contains the iPhoneMirroringAgent class for interacting with the iPhone mirroring and Claude API
+- `constants.py`: Contains constant values like SYSTEM_PROMPT and TOOLS
+- `utils.py`: Contains utility functions (currently empty, but ready for future use)
 
 ## How It Works
 
