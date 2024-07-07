@@ -1,13 +1,9 @@
 import anthropic
-import pyautogui
-import io
-from PIL import Image, ImageGrab, ImageDraw
 import time
-import base64
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap
 from constants import SYSTEM_PROMPT, TOOLS
-from utils import find_and_flash_iphone_mirroring_window
+from screen import capture_screenshot, move_cursor, click_cursor, find_and_flash_iphone_mirroring_window
 
 class iPhoneMirroringAgent(QThread):
     update_log = pyqtSignal(str)
@@ -33,62 +29,12 @@ class iPhoneMirroringAgent(QThread):
                 if self.iphone_window is None:
                     raise Exception("iPhone Mirroring window not found")
             
-            left, top, right, bottom = self.iphone_window.box
-
-            screenshot = ImageGrab.grab(bbox=(left, top, right, bottom))
-            
-            screenshot = screenshot.convert('RGB')
-            
-            max_size = (1600, 1600)
-            screenshot.thumbnail(max_size, Image.LANCZOS)
-            
-            cursor_x, cursor_y = pyautogui.position()
-            self.cursor_position = (cursor_x - left, cursor_y - top)
-            
-            draw = ImageDraw.Draw(screenshot)
-            cursor_radius = 10
-            cursor_color = "red"
-            draw.ellipse([self.cursor_position[0] - cursor_radius, self.cursor_position[1] - cursor_radius,
-                          self.cursor_position[0] + cursor_radius, self.cursor_position[1] + cursor_radius],
-                         outline=cursor_color, width=2)
-            
-            line_length = 20
-            draw.line([self.cursor_position[0] - line_length, self.cursor_position[1],
-                       self.cursor_position[0] + line_length, self.cursor_position[1]],
-                      fill=cursor_color, width=2)
-            draw.line([self.cursor_position[0], self.cursor_position[1] - line_length,
-                       self.cursor_position[0], self.cursor_position[1] + line_length],
-                      fill=cursor_color, width=2)
-            
-            img_byte_arr = io.BytesIO()
-            quality = 85
-            screenshot.save(img_byte_arr, format='JPEG', quality=quality)
-            img_byte_arr = img_byte_arr.getvalue()
-            
-            while len(img_byte_arr) > 5 * 1024 * 1024:
-                quality = int(quality * 0.9)
-                img_byte_arr = io.BytesIO()
-                screenshot.save(img_byte_arr, format='JPEG', quality=quality)
-                img_byte_arr = img_byte_arr.getvalue()
-            
-            pixmap = QPixmap()
-            pixmap.loadFromData(img_byte_arr)
+            pixmap, screenshot_data, self.cursor_position = capture_screenshot(self.iphone_window)
             self.update_screenshot.emit(pixmap, self.cursor_position)
-            return base64.b64encode(img_byte_arr).decode("utf-8"), self.cursor_position
+            return screenshot_data, self.cursor_position
         except Exception as e:
             self.update_log.emit(f"Error capturing screenshot: {str(e)}")
             return None, None
-
-    def move_cursor(self, direction, distance):
-        if direction in ["right", "left"]:
-            pyautogui.moveRel(xOffset=distance if direction == "right" else -distance, yOffset=0)
-        elif direction in ["down", "up"]:
-            pyautogui.moveRel(xOffset=0, yOffset=distance if direction == "down" else -distance)
-        return f"Cursor moved {direction} by {distance} pixels."
-
-    def click_cursor(self):
-        pyautogui.click()
-        return "Click performed successfully."
 
     def send_to_claude(self, screenshot_data, cursor_position, tool_use=None, tool_result=None):
         if len(self.conversation) >= self.max_messages:
@@ -183,9 +129,9 @@ class iPhoneMirroringAgent(QThread):
                     break
                 
                 if tool_use.name == "move_cursor":
-                    result = self.move_cursor(tool_use.input["direction"], tool_use.input["distance"])
+                    result = move_cursor(tool_use.input["direction"], tool_use.input["distance"])
                 elif tool_use.name == "click_cursor":
-                    result = self.click_cursor()
+                    result = click_cursor()
                 
                 self.update_log.emit(f"Executed {tool_use.name}: {result}")
                 

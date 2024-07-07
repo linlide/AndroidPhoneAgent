@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPu
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QPoint
 from agent import iPhoneMirroringAgent
-from utils import find_and_flash_iphone_mirroring_window
+from screen import find_and_flash_iphone_mirroring_window
 
 class MainWindow(QMainWindow):
     def __init__(self):

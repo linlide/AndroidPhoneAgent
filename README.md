@@ -55,7 +55,7 @@ The project is organized into multiple files for better modularity and maintaina
 - `gui.py`: Contains the MainWindow class and GUI-related code
 - `agent.py`: Contains the iPhoneMirroringAgent class for interacting with the iPhone mirroring and Claude API
 - `constants.py`: Contains constant values like SYSTEM_PROMPT and TOOLS
-- `utils.py`: Contains utility functions for window management and flashing
+- `screen.py`: Contains utility functions for screen capture, window management, and cursor operations
 
 ## How It Works
 
