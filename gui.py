@@ -3,9 +3,10 @@ import json
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QTextEdit, QLabel, QLineEdit, QFormLayout, QGroupBox, QStatusBar,
                              QSpacerItem, QSizePolicy)
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QPoint
 from agent import iPhoneMirroringAgent
+from utils import bring_window_to_front, find_and_flash_iphone_mirroring_window
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -180,6 +181,11 @@ class MainWindow(QMainWindow):
         task_description = self.task_input.text()
 
         if api_key and task_description:
+            if bring_window_to_front("iPhone Mirroring"):
+                find_and_flash_iphone_mirroring_window()
+            else:
+                self.update_log("iPhone Mirroring app not found or couldn't be brought to front.")
+
             self.agent = iPhoneMirroringAgent(api_key, model, max_tokens, temperature, max_messages)
             self.agent.update_log.connect(self.update_log)
             self.agent.update_screenshot.connect(self.update_screenshot)

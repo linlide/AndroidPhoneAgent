@@ -11,6 +11,7 @@ The iPhone Mirroring Agent is a Python-based tool that uses Claude AI to automat
 - Conversation logging
 - Configurable AI model parameters
 - User-friendly graphical interface for easy interaction and real-time feedback
+- Automatic flashing of the iPhone Mirroring app window when starting a task
 
 ## Installation
 
@@ -54,22 +55,24 @@ The project is organized into multiple files for better modularity and maintaina
 - `gui.py`: Contains the MainWindow class and GUI-related code
 - `agent.py`: Contains the iPhoneMirroringAgent class for interacting with the iPhone mirroring and Claude API
 - `constants.py`: Contains constant values like SYSTEM_PROMPT and TOOLS
-- `utils.py`: Contains utility functions (currently empty, but ready for future use)
+- `utils.py`: Contains utility functions for window management and flashing
 
 ## How It Works
 
-1. The script captures a screenshot of the mirrored iPhone screen.
-2. The screenshot is sent to Claude AI for analysis.
-3. Claude AI provides instructions for the next action (move cursor, click, etc.).
-4. The script executes the instructed action using PyAutoGUI.
-5. This process repeats until the task is completed or the maximum number of messages is reached.
-6. The GUI provides real-time updates on the task progress and displays the current screenshot.
+1. When the "Start Task" button is clicked, the application attempts to bring the iPhone Mirroring app window to the front and flash it to draw attention.
+2. The script captures a screenshot of the mirrored iPhone screen.
+3. The screenshot is sent to Claude AI for analysis.
+4. Claude AI provides instructions for the next action (move cursor, click, etc.).
+5. The script executes the instructed action using PyAutoGUI.
+6. This process repeats until the task is completed or the maximum number of messages is reached.
+7. The GUI provides real-time updates on the task progress and displays the current screenshot.
 
 ## Limitations
 
 - The script is designed for use with a mirrored iPhone 12 Pro screen. Other device models may require adjustments to the screen resolution and interaction parameters.
 - The effectiveness of the automation depends on the quality of the mirrored display and the complexity of the task.
 - The script relies on the Anthropic API, so an active internet connection is required.
+- The window flashing feature requires the iPhone Mirroring app to be running and visible on the screen.
 
 ## Contributing
 
