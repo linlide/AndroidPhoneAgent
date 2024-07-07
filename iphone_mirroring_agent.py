@@ -1,12 +1,13 @@
 import anthropic
 import pyautogui
 import io
-from PIL import Image
+from PIL import Image, ImageGrab
 import time
 import base64
 import sys
 import json
 import os
+import pywinctl as pwc
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QTextEdit, QLabel, QLineEdit, QFormLayout, QGroupBox, QStatusBar)
 from PyQt5.QtGui import QPixmap, QIcon
@@ -109,7 +110,14 @@ class iPhoneMirroringAgent(QThread):
 
     def capture_screenshot(self):
         try:
-            screenshot = pyautogui.screenshot()
+            iphone_windows = [w for w in pwc.getAllWindows() if 'iPhone Mirroring' in w.title]
+            if not iphone_windows:
+                raise Exception("iPhone Mirroring window not found")
+            
+            window = iphone_windows[0]
+            left, top, right, bottom = window.box
+
+            screenshot = ImageGrab.grab(bbox=(left, top, right, bottom))
             
             screenshot = screenshot.convert('RGB')
             
@@ -156,6 +164,8 @@ class iPhoneMirroringAgent(QThread):
         content = []
         
         if tool_use and tool_result:
+            if isinstance(tool_result, str):
+                tool_result = {"result": tool_result}
             content.append({
                 "type": "tool_result",
                 "tool_use_id": tool_use.id,
@@ -335,10 +345,9 @@ class MainWindow(QMainWindow):
         self.screenshot_layout = QVBoxLayout()
         self.screenshot_label = QLabel()
         self.screenshot_label.setAlignment(Qt.AlignCenter)
-        self.screenshot_label.setFixedSize(200, 433)
         self.screenshot_layout.addWidget(self.screenshot_label)
         self.screenshot_group.setLayout(self.screenshot_layout)
-        self.right_layout.addWidget(self.screenshot_group)
+        self.right_layout.addWidget(self.screenshot_group, 1)  # Added stretch factor
 
         self.layout.addLayout(self.left_layout, 1)
         self.layout.addLayout(self.right_layout, 1)
@@ -421,7 +430,8 @@ class MainWindow(QMainWindow):
         self.log_display.append(message)
 
     def update_screenshot(self, pixmap):
-        scaled_pixmap = pixmap.scaled(self.screenshot_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        label_width = self.screenshot_label.width()
+        scaled_pixmap = pixmap.scaledToWidth(label_width, Qt.SmoothTransformation)
         self.screenshot_label.setPixmap(scaled_pixmap)
 
     def on_task_completed(self, success, reason):
@@ -429,6 +439,11 @@ class MainWindow(QMainWindow):
         status = "completed successfully" if success else "failed"
         self.update_log(f"Task {status}. Reason: {reason}")
         self.status_bar.showMessage(f"Task {status}")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'screenshot_label') and self.screenshot_label.pixmap():
+            self.update_screenshot(self.screenshot_label.pixmap().copy())
 
 def main():
     app = QApplication(sys.argv)
