@@ -1,13 +1,16 @@
 import anthropic
 import pyautogui
 import io
+from PIL import Image
 import time
 import base64
 import sys
+import json
+import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QTextEdit, QLabel, QLineEdit, QFormLayout, QGroupBox, QStatusBar)
 from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPoint
 
 SYSTEM_PROMPT = """
 You are an AI assistant specialized in guiding users through simulated touch operations on an iPhone 12 Pro screen. Your task is to interpret screen images and then provide precise movement and click instructions to complete specific tasks.
@@ -105,14 +108,32 @@ class iPhoneMirroringAgent(QThread):
         self.task_description = ""
 
     def capture_screenshot(self):
-        screenshot = pyautogui.screenshot()
-        img_byte_arr = io.BytesIO()
-        screenshot.save(img_byte_arr, format='PNG')
-        img_byte_arr = img_byte_arr.getvalue()
-        pixmap = QPixmap()
-        pixmap.loadFromData(img_byte_arr)
-        self.update_screenshot.emit(pixmap)
-        return base64.b64encode(img_byte_arr).decode("utf-8")
+        try:
+            screenshot = pyautogui.screenshot()
+            
+            screenshot = screenshot.convert('RGB')
+            
+            max_size = (1600, 1600)
+            screenshot.thumbnail(max_size, Image.LANCZOS)
+            
+            img_byte_arr = io.BytesIO()
+            quality = 85
+            screenshot.save(img_byte_arr, format='JPEG', quality=quality)
+            img_byte_arr = img_byte_arr.getvalue()
+            
+            while len(img_byte_arr) > 5 * 1024 * 1024:
+                quality = int(quality * 0.9)
+                img_byte_arr = io.BytesIO()
+                screenshot.save(img_byte_arr, format='JPEG', quality=quality)
+                img_byte_arr = img_byte_arr.getvalue()
+            
+            pixmap = QPixmap()
+            pixmap.loadFromData(img_byte_arr)
+            self.update_screenshot.emit(pixmap)
+            return base64.b64encode(img_byte_arr).decode("utf-8")
+        except Exception as e:
+            self.update_log.emit(f"Error capturing screenshot: {str(e)}")
+            return None
 
     def move_cursor(self, direction, distance):
         if direction in ["right", "left"]:
@@ -150,7 +171,7 @@ class iPhoneMirroringAgent(QThread):
                 "type": "image",
                 "source": {
                     "type": "base64",
-                    "media_type": "image/png",
+                    "media_type": "image/jpeg",
                     "data": screenshot_data
                 }
             }
@@ -175,6 +196,10 @@ class iPhoneMirroringAgent(QThread):
 
     def run(self):
         screenshot_data = self.capture_screenshot()
+        if screenshot_data is None:
+            self.update_log.emit("Failed to capture screenshot. Exiting task.")
+            self.task_completed.emit(False, "Screenshot capture failed")
+            return
         message = self.send_to_claude(screenshot_data)
         
         while True:
@@ -210,6 +235,10 @@ class iPhoneMirroringAgent(QThread):
                 self.update_log.emit(f"Executed {tool_use.name}: {result}")
                 
                 new_screenshot_data = self.capture_screenshot()
+                if new_screenshot_data is None:
+                    self.update_log.emit("Failed to capture screenshot. Exiting task.")
+                    self.task_completed.emit(False, "Screenshot capture failed")
+                    return
                 
                 message = self.send_to_claude(new_screenshot_data, tool_use, result)
             else:
@@ -222,7 +251,11 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("iPhone Mirroring Agent")
-        self.setGeometry(100, 100, 800, 600)
+        
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowMaximizeButtonHint)
+        
+        self.setFixedSize(800, 600)
+        
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #f0f0f0;
@@ -269,10 +302,10 @@ class MainWindow(QMainWindow):
         self.input_group = QGroupBox("Configuration")
         self.form_layout = QFormLayout()
         self.api_key_input = QLineEdit()
-        self.model_input = QLineEdit("claude-3-sonnet-20240320")
-        self.max_tokens_input = QLineEdit("2048")
-        self.temperature_input = QLineEdit("0.7")
-        self.max_messages_input = QLineEdit("20")
+        self.model_input = QLineEdit()
+        self.max_tokens_input = QLineEdit()
+        self.temperature_input = QLineEdit()
+        self.max_messages_input = QLineEdit()
         self.task_input = QLineEdit()
 
         self.form_layout.addRow("API Key:", self.api_key_input)
@@ -314,6 +347,52 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
 
         self.agent = None
+        self.settings_file = "settings.json"
+        self.load_settings()
+
+        self.api_key_input.textChanged.connect(self.save_settings)
+        self.model_input.textChanged.connect(self.save_settings)
+        self.max_tokens_input.textChanged.connect(self.save_settings)
+        self.temperature_input.textChanged.connect(self.save_settings)
+        self.max_messages_input.textChanged.connect(self.save_settings)
+        self.task_input.textChanged.connect(self.save_settings)
+
+    def load_settings(self):
+        if os.path.exists(self.settings_file):
+            with open(self.settings_file, "r") as f:
+                settings = json.load(f)
+                self.api_key_input.setText(settings.get("api_key", ""))
+                self.model_input.setText(settings.get("model", "claude-3-5-sonnet-20240620"))
+                self.max_tokens_input.setText(str(settings.get("max_tokens", 2048)))
+                self.temperature_input.setText(str(settings.get("temperature", 0.7)))
+                self.max_messages_input.setText(str(settings.get("max_messages", 20)))
+                self.task_input.setText(settings.get("task_description", ""))
+                
+                pos = settings.get("window_position", None)
+                if pos:
+                    self.move(QPoint(pos[0], pos[1]))
+        else:
+            self.model_input.setText("claude-3-5-sonnet-20240620")
+            self.max_tokens_input.setText("2048")
+            self.temperature_input.setText("0.7")
+            self.max_messages_input.setText("20")
+
+    def save_settings(self):
+        settings = {
+            "api_key": self.api_key_input.text(),
+            "model": self.model_input.text(),
+            "max_tokens": self.max_tokens_input.text(),
+            "temperature": self.temperature_input.text(),
+            "max_messages": self.max_messages_input.text(),
+            "task_description": self.task_input.text(),
+            "window_position": [self.pos().x(), self.pos().y()]
+        }
+        with open(self.settings_file, "w") as f:
+            json.dump(settings, f)
+
+    def closeEvent(self, event):
+        self.save_settings()
+        super().closeEvent(event)
 
     def start_task(self):
         api_key = self.api_key_input.text()
@@ -356,7 +435,14 @@ def main():
     app.setStyle("Fusion")
     window = MainWindow()
     window.show()
-    sys.exit(app.exec_())
+
+    try:
+        sys.exit(app.exec_())
+    except KeyboardInterrupt:
+        print("\nCtrl+C detected. Exiting gracefully...")
+        window.save_settings()
+        app.quit()
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()

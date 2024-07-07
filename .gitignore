@@ -40,3 +40,4 @@ venv.bak/
 # Project specific
 conversation_*.md
 *.log
+settings.json
