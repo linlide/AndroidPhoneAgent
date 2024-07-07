@@ -3,9 +3,11 @@ import pyautogui
 import io
 import time
 import base64
-import argparse
-from datetime import datetime
 import sys
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
+                             QTextEdit, QLabel, QLineEdit, QFormLayout, QGroupBox, QStatusBar)
+from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
 SYSTEM_PROMPT = """
 You are an AI assistant specialized in guiding users through simulated touch operations on an iPhone 12 Pro screen. Your task is to interpret screen images and then provide precise movement and click instructions to complete specific tasks.
@@ -87,8 +89,13 @@ TOOLS = [
     }
 ]
 
-class iPhoneMirroringAgent:
+class iPhoneMirroringAgent(QThread):
+    update_log = pyqtSignal(str)
+    update_screenshot = pyqtSignal(QPixmap)
+    task_completed = pyqtSignal(bool, str)
+
     def __init__(self, api_key, model, max_tokens, temperature, max_messages):
+        super().__init__()
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
         self.max_tokens = max_tokens
@@ -96,13 +103,15 @@ class iPhoneMirroringAgent:
         self.max_messages = max_messages
         self.conversation = []
         self.task_description = ""
-        self.log_file = None
 
     def capture_screenshot(self):
         screenshot = pyautogui.screenshot()
         img_byte_arr = io.BytesIO()
         screenshot.save(img_byte_arr, format='PNG')
         img_byte_arr = img_byte_arr.getvalue()
+        pixmap = QPixmap()
+        pixmap.loadFromData(img_byte_arr)
+        self.update_screenshot.emit(pixmap)
         return base64.b64encode(img_byte_arr).decode("utf-8")
 
     def move_cursor(self, direction, distance):
@@ -119,12 +128,9 @@ class iPhoneMirroringAgent:
     def send_to_claude(self, screenshot_data, tool_use=None, tool_result=None):
         if len(self.conversation) >= self.max_messages:
             error_message = f"Conversation exceeded maximum length of {self.max_messages} messages. Exiting task as failed."
-            print(error_message)
-            self.append_to_log({
-                "role": "error",
-                "content": [{"type": "text", "text": error_message}]
-            })
-            sys.exit(1)
+            self.update_log.emit(error_message)
+            self.task_completed.emit(False, error_message)
+            return None
 
         content = []
         
@@ -154,7 +160,7 @@ class iPhoneMirroringAgent:
             "role": "user",
             "content": content
         })
-        self.append_to_log(self.conversation[-1])
+        self.update_log.emit(f"User: Sent screenshot for analysis")
 
         response = self.client.messages.create(
             model=self.model,
@@ -167,49 +173,20 @@ class iPhoneMirroringAgent:
 
         return response
 
-    def initialize_log(self):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.log_file = f"conversation_{timestamp}.md"
-        
-        with open(self.log_file, "w", encoding="utf-8") as f:
-            f.write(f"# Conversation Log\n\n")
-            f.write(f"Task Description: {self.task_description}\n\n")
-            f.write(f"Model: {self.model}\n\n")
-            f.write(f"Max Tokens: {self.max_tokens}\n\n")
-            f.write(f"Temperature: {self.temperature}\n\n")
-            f.write(f"Max Messages: {self.max_messages}\n\n")
-
-    def append_to_log(self, message):
-        with open(self.log_file, "a", encoding="utf-8") as f:
-            f.write(f"## {message['role'].capitalize()}\n\n")
-            for content in message['content']:
-                if content['type'] == 'text':
-                    f.write(f"{content['text']}\n\n")
-                elif content['type'] == 'image':
-                    f.write(f"[Screenshot]\n\n")
-                elif content['type'] == 'tool_result':
-                    f.write(f"Tool Result: {content['content']}\n\n")
-            f.write("---\n\n")
-
-    def run_task(self):
-        self.task_description = input("Enter the task description: ")
-        self.initialize_log()
-        print(f"Conversation log will be saved to {self.log_file}")
-        
+    def run(self):
         screenshot_data = self.capture_screenshot()
         message = self.send_to_claude(screenshot_data)
         
         while True:
-            print("Claude's response:")
+            self.update_log.emit("Claude's response:")
             for block in message.content:
                 if block.type == "text":
-                    print(block.text)
+                    self.update_log.emit(block.text)
             
             self.conversation.append({
                 "role": "assistant",
                 "content": message.content
             })
-            self.append_to_log(self.conversation[-1])
             
             if message.stop_reason == "tool_use":
                 tool_use = next(block for block in message.content if block.type == "tool_use")
@@ -218,9 +195,11 @@ class iPhoneMirroringAgent:
                     status = tool_use.input["status"]
                     reason = tool_use.input["reason"]
                     if status == "completed":
-                        print(f"Task completed successfully. Reason: {reason}")
+                        self.update_log.emit(f"Task completed successfully. Reason: {reason}")
+                        self.task_completed.emit(True, reason)
                     else:
-                        print(f"Task failed. Reason: {reason}")
+                        self.update_log.emit(f"Task failed. Reason: {reason}")
+                        self.task_completed.emit(False, reason)
                     break
                 
                 if tool_use.name == "move_cursor":
@@ -228,28 +207,156 @@ class iPhoneMirroringAgent:
                 elif tool_use.name == "click_cursor":
                     result = self.click_cursor()
                 
-                print(f"Executed {tool_use.name}: {result}")
+                self.update_log.emit(f"Executed {tool_use.name}: {result}")
                 
                 new_screenshot_data = self.capture_screenshot()
                 
                 message = self.send_to_claude(new_screenshot_data, tool_use, result)
             else:
-                print("Claude did not request to use a tool. Continuing...")
+                self.update_log.emit("Claude did not request to use a tool. Continuing...")
                 message = self.send_to_claude(screenshot_data)
             
             time.sleep(1)
 
-def main():
-    parser = argparse.ArgumentParser(description="Run the iPhone Mirroring Agent with Claude AI")
-    parser.add_argument("--api_key", required=True, help="Anthropic API key")
-    parser.add_argument("--model", default="claude-3-sonnet-20240320", help="Model name to use for Claude")
-    parser.add_argument("--max_tokens", type=int, default=2048, help="Maximum number of tokens in Claude's response")
-    parser.add_argument("--temperature", type=float, default=0.7, help="Temperature for Claude's responses (0.0 to 1.0)")
-    parser.add_argument("--max_messages", type=int, default=20, help="Maximum number of messages in the conversation")
-    args = parser.parse_args()
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("iPhone Mirroring Agent")
+        self.setGeometry(100, 100, 800, 600)
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f0f0f0;
+            }
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #cccccc;
+                border-radius: 5px;
+                margin-top: 1ex;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 3px 0 3px;
+            }
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QLineEdit, QTextEdit {
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            QLabel {
+                font-weight: bold;
+            }
+        """)
 
-    agent = iPhoneMirroringAgent(args.api_key, args.model, args.max_tokens, args.temperature, args.max_messages)
-    agent.run_task()
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QHBoxLayout(self.central_widget)
+
+        self.left_layout = QVBoxLayout()
+        self.right_layout = QVBoxLayout()
+
+        self.input_group = QGroupBox("Configuration")
+        self.form_layout = QFormLayout()
+        self.api_key_input = QLineEdit()
+        self.model_input = QLineEdit("claude-3-sonnet-20240320")
+        self.max_tokens_input = QLineEdit("2048")
+        self.temperature_input = QLineEdit("0.7")
+        self.max_messages_input = QLineEdit("20")
+        self.task_input = QLineEdit()
+
+        self.form_layout.addRow("API Key:", self.api_key_input)
+        self.form_layout.addRow("Model:", self.model_input)
+        self.form_layout.addRow("Max Tokens:", self.max_tokens_input)
+        self.form_layout.addRow("Temperature:", self.temperature_input)
+        self.form_layout.addRow("Max Messages:", self.max_messages_input)
+        self.form_layout.addRow("Task Description:", self.task_input)
+        self.input_group.setLayout(self.form_layout)
+
+        self.left_layout.addWidget(self.input_group)
+
+        self.start_button = QPushButton("Start Task")
+        self.start_button.setIcon(QIcon.fromTheme("media-playback-start"))
+        self.start_button.clicked.connect(self.start_task)
+        self.left_layout.addWidget(self.start_button)
+
+        self.log_group = QGroupBox("Log")
+        self.log_layout = QVBoxLayout()
+        self.log_display = QTextEdit()
+        self.log_display.setReadOnly(True)
+        self.log_layout.addWidget(self.log_display)
+        self.log_group.setLayout(self.log_layout)
+        self.left_layout.addWidget(self.log_group)
+
+        self.screenshot_group = QGroupBox("Current Screenshot")
+        self.screenshot_layout = QVBoxLayout()
+        self.screenshot_label = QLabel()
+        self.screenshot_label.setAlignment(Qt.AlignCenter)
+        self.screenshot_label.setFixedSize(200, 433)
+        self.screenshot_layout.addWidget(self.screenshot_label)
+        self.screenshot_group.setLayout(self.screenshot_layout)
+        self.right_layout.addWidget(self.screenshot_group)
+
+        self.layout.addLayout(self.left_layout, 1)
+        self.layout.addLayout(self.right_layout, 1)
+
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+
+        self.agent = None
+
+    def start_task(self):
+        api_key = self.api_key_input.text()
+        model = self.model_input.text()
+        max_tokens = int(self.max_tokens_input.text())
+        temperature = float(self.temperature_input.text())
+        max_messages = int(self.max_messages_input.text())
+        task_description = self.task_input.text()
+
+        if api_key and task_description:
+            self.agent = iPhoneMirroringAgent(api_key, model, max_tokens, temperature, max_messages)
+            self.agent.update_log.connect(self.update_log)
+            self.agent.update_screenshot.connect(self.update_screenshot)
+            self.agent.task_completed.connect(self.on_task_completed)
+
+            self.agent.task_description = task_description
+            self.log_display.clear()
+            self.update_log(f"Starting task: {task_description}")
+            self.agent.start()
+            self.start_button.setEnabled(False)
+            self.status_bar.showMessage("Task in progress...")
+        else:
+            self.update_log("Please enter both API key and task description.")
+
+    def update_log(self, message):
+        self.log_display.append(message)
+
+    def update_screenshot(self, pixmap):
+        scaled_pixmap = pixmap.scaled(self.screenshot_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.screenshot_label.setPixmap(scaled_pixmap)
+
+    def on_task_completed(self, success, reason):
+        self.start_button.setEnabled(True)
+        status = "completed successfully" if success else "failed"
+        self.update_log(f"Task {status}. Reason: {reason}")
+        self.status_bar.showMessage(f"Task {status}")
+
+def main():
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec_())
 
 if __name__ == "__main__":
     main()
