@@ -2,12 +2,16 @@ import os
 import io
 import base64
 import pyautogui
+import logging
 from PIL import Image, ImageDraw
 from PyQt5.QtGui import QPixmap
 import time
 
+logger = logging.getLogger(__name__)
+
 def capture_screenshot():
     try:
+        logger.info("Capturing screenshot")
         pyautogui.hotkey('command', 'shift', '3')
         
         time.sleep(5)
@@ -52,17 +56,29 @@ def capture_screenshot():
         
         pixmap = QPixmap()
         pixmap.loadFromData(img_byte_arr)
+        logger.info(f"Screenshot captured successfully. Cursor position: ({cursor_x}, {cursor_y})")
         return pixmap, base64.b64encode(img_byte_arr).decode("utf-8"), (cursor_x, cursor_y)
     except Exception as e:
+        logger.error(f"Error capturing screenshot: {str(e)}")
         raise Exception(f"Error capturing screenshot: {str(e)}")
 
 def move_cursor(direction, distance):
-    if direction in ["right", "left"]:
-        pyautogui.moveRel(xOffset=distance if direction == "right" else -distance, yOffset=0)
-    elif direction in ["down", "up"]:
-        pyautogui.moveRel(xOffset=0, yOffset=distance if direction == "down" else -distance)
-    return f"Cursor moved {direction} by {distance} pixels."
+    try:
+        if direction in ["right", "left"]:
+            pyautogui.moveRel(xOffset=distance if direction == "right" else -distance, yOffset=0)
+        elif direction in ["down", "up"]:
+            pyautogui.moveRel(xOffset=0, yOffset=distance if direction == "down" else -distance)
+        logger.info(f"Cursor moved {direction} by {distance} pixels")
+        return f"Cursor moved {direction} by {distance} pixels."
+    except Exception as e:
+        logger.error(f"Error moving cursor: {str(e)}")
+        raise Exception(f"Error moving cursor: {str(e)}")
 
 def click_cursor():
-    pyautogui.click()
-    return "Click performed successfully."
+    try:
+        pyautogui.click()
+        logger.info("Click performed successfully")
+        return "Click performed successfully."
+    except Exception as e:
+        logger.error(f"Error performing click: {str(e)}")
+        raise Exception(f"Error performing click: {str(e)}")

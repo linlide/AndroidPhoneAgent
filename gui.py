@@ -1,7 +1,8 @@
 import os
 import json
+import logging
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                             QTextEdit, QLabel, QLineEdit, QFormLayout, QGroupBox, QStatusBar,
+                             QLabel, QLineEdit, QTextEdit, QGroupBox, QStatusBar,
                              QSizePolicy, QMessageBox)
 from PyQt5.QtGui import QIcon, QMouseEvent
 from PyQt5.QtCore import Qt, QPoint, QTimer
@@ -35,6 +36,7 @@ class ClickableLabel(QLabel):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.logger = logging.getLogger(__name__)
         self.setWindowTitle("iPhone Mirroring Agent")
         
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowMaximizeButtonHint)
@@ -44,17 +46,6 @@ class MainWindow(QMainWindow):
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #f0f0f0;
-            }
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #cccccc;
-                border-radius: 5px;
-                margin-top: 1ex;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 3px 0 3px;
             }
             QPushButton {
                 background-color: #4CAF50;
@@ -105,8 +96,7 @@ class MainWindow(QMainWindow):
         self.left_layout = QVBoxLayout()
         self.right_layout = QVBoxLayout()
 
-        self.create_input_group()
-        self.create_log_group()
+        self.create_input_fields()
         self.create_screenshot_group()
 
         self.layout.addLayout(self.left_layout, 1)
@@ -115,25 +105,39 @@ class MainWindow(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
-    def create_input_group(self):
-        self.input_group = QGroupBox("Configuration")
-        self.form_layout = QFormLayout()
+    def create_input_fields(self):
+        layout = QVBoxLayout()
+        layout.setSpacing(2)
+        layout.setContentsMargins(10, 15, 10, 35)
+
+        def add_input_field(label_text, widget):
+            layout.addWidget(QLabel(label_text))
+            layout.addSpacing(5)
+            layout.addWidget(widget)
+            layout.addSpacing(15)
+
         self.api_key_input = PasswordLineEdit()
+        add_input_field("API Key:", self.api_key_input)
+
         self.model_input = QLineEdit()
+        add_input_field("Model:", self.model_input)
+
         self.max_tokens_input = QLineEdit()
+        add_input_field("Max Tokens:", self.max_tokens_input)
+
         self.temperature_input = QLineEdit()
+        add_input_field("Temperature:", self.temperature_input)
+
         self.max_messages_input = QLineEdit()
-        self.task_input = QLineEdit()
+        add_input_field("Max Messages:", self.max_messages_input)
 
-        self.form_layout.addRow("API Key:", self.api_key_input)
-        self.form_layout.addRow("Model:", self.model_input)
-        self.form_layout.addRow("Max Tokens:", self.max_tokens_input)
-        self.form_layout.addRow("Temperature:", self.temperature_input)
-        self.form_layout.addRow("Max Messages:", self.max_messages_input)
-        self.form_layout.addRow("Task Description:", self.task_input)
-        self.input_group.setLayout(self.form_layout)
+        self.task_input = QTextEdit()
+        self.task_input.setFixedHeight(100)
+        add_input_field("Task Description:", self.task_input)
 
-        self.left_layout.addWidget(self.input_group)
+        layout.addSpacing(30)
+
+        self.left_layout.addLayout(layout)
 
         self.button_layout = QHBoxLayout()
         self.start_button = QPushButton("Start Task")
@@ -167,15 +171,6 @@ class MainWindow(QMainWindow):
 
         self.left_layout.addLayout(self.button_layout)
 
-    def create_log_group(self):
-        self.log_group = QGroupBox("Log")
-        self.log_layout = QVBoxLayout()
-        self.log_display = QTextEdit()
-        self.log_display.setReadOnly(True)
-        self.log_layout.addWidget(self.log_display)
-        self.log_group.setLayout(self.log_layout)
-        self.left_layout.addWidget(self.log_group)
-
     def create_screenshot_group(self):
         self.screenshot_group = QGroupBox("Current Screenshot")
         self.screenshot_layout = QVBoxLayout()
@@ -203,16 +198,18 @@ class MainWindow(QMainWindow):
                 self.max_tokens_input.setText(str(settings.get("max_tokens", 2048)))
                 self.temperature_input.setText(str(settings.get("temperature", 0.7)))
                 self.max_messages_input.setText(str(settings.get("max_messages", 20)))
-                self.task_input.setText(settings.get("task_description", ""))
+                self.task_input.setPlainText(settings.get("task_description", ""))
                 
                 pos = settings.get("window_position", None)
                 if pos:
                     self.move(QPoint(pos[0], pos[1]))
+            self.logger.info("Settings loaded successfully")
         else:
             self.model_input.setText("claude-3-5-sonnet-20240620")
             self.max_tokens_input.setText("2048")
             self.temperature_input.setText("0.7")
             self.max_messages_input.setText("20")
+            self.logger.info("Default settings applied")
 
     def save_settings(self):
         settings = {
@@ -221,23 +218,26 @@ class MainWindow(QMainWindow):
             "max_tokens": self.max_tokens_input.text(),
             "temperature": self.temperature_input.text(),
             "max_messages": self.max_messages_input.text(),
-            "task_description": self.task_input.text(),
+            "task_description": self.task_input.toPlainText(),
             "window_position": [self.pos().x(), self.pos().y()]
         }
         with open(self.settings_file, "w") as f:
             json.dump(settings, f)
+        self.logger.info("Settings saved successfully")
 
     def closeEvent(self, event):
         self.save_settings()
+        self.logger.info("Application closed")
         super().closeEvent(event)
 
     def start_task(self):
         api_key = self.api_key_input.text()
         model = self.model_input.text()
-        task_description = self.task_input.text()
+        task_description = self.task_input.toPlainText()
 
         if not api_key or not task_description:
             QMessageBox.warning(self, "Missing Information", "Please enter both API key and task description.")
+            self.logger.warning("Task start attempted with missing information")
             return
 
         try:
@@ -246,10 +246,10 @@ class MainWindow(QMainWindow):
             max_messages = int(self.max_messages_input.text())
         except ValueError:
             QMessageBox.warning(self, "Invalid Input", "Please enter valid numeric values for Max Tokens, Temperature, and Max Messages.")
+            self.logger.warning("Task start attempted with invalid numeric inputs")
             return
 
         self.agent = iPhoneMirroringAgent(api_key, model, max_tokens, temperature, max_messages)
-        self.agent.update_log.connect(self.update_log)
         self.agent.update_screenshot.connect(self.update_screenshot)
         self.agent.task_completed.connect(self.on_task_completed)
         self.agent.add_to_conversation.connect(self.add_to_conversation)
@@ -257,33 +257,32 @@ class MainWindow(QMainWindow):
         self.agent.add_tool_result.connect(self.add_tool_result_to_conversation)
 
         self.agent.task_description = task_description
-        self.log_display.clear()
         self.conversation.clear()
-        self.update_log(f"Starting task: {task_description}")
         self.conversation.append(("system", f"Task: {task_description}"))
         self.agent.start()
         self.update_button_visibility("running")
         self.status_bar.showMessage("Task in progress...")
+        self.logger.info(f"Task started: {task_description}")
 
     def pause_task(self):
         if self.agent and self.agent.isRunning():
             self.agent.pause()
-            self.update_log("Task paused.")
             self.update_button_visibility("paused")
             self.status_bar.showMessage("Task paused")
+            self.logger.info("Task paused")
 
     def resume_task(self):
         if self.agent and self.agent.isPaused():
             self.agent.resume()
-            self.update_log("Task resumed.")
             self.update_button_visibility("running")
             self.status_bar.showMessage("Task in progress...")
+            self.logger.info("Task resumed")
 
     def cancel_task(self):
         if self.agent and self.agent.isRunning():
             self.agent.cancel()
-            self.update_log("Task cancellation requested.")
             self.status_bar.showMessage("Cancelling task...")
+            self.logger.info("Task cancellation requested")
 
     def update_button_visibility(self, state):
         if state == "idle":
@@ -304,51 +303,58 @@ class MainWindow(QMainWindow):
             self.resume_button.show()
             self.cancel_button.show()
             self.export_button.hide()
-
-    def update_log(self, message):
-        self.log_display.append(message)
-        self.conversation.append(("log", message))
+        self.logger.debug(f"Button visibility updated to state: {state}")
 
     def update_screenshot(self, pixmap, cursor_position):
         self.original_pixmap = pixmap
         self.scale_and_set_pixmap()
         self.update_screenshot_cursor_position(cursor_position[0], cursor_position[1])
         self.conversation.append(("screenshot", pixmap))
+        self.logger.debug(f"Screenshot updated. Cursor position: {cursor_position}")
 
     def scale_and_set_pixmap(self):
         if self.original_pixmap:
             label_width = self.screenshot_label.width()
             scaled_pixmap = self.original_pixmap.scaledToWidth(label_width, Qt.SmoothTransformation)
             self.screenshot_label.setPixmap(scaled_pixmap)
+            self.logger.debug("Screenshot scaled and set")
 
     def update_screen_cursor_position(self):
         cursor_x, cursor_y = pyautogui.position()
         self.screen_cursor_label.setText(f"Screen Cursor:     ({cursor_x:5d},{cursor_y:5d})")
+        self.logger.debug(f"Screen cursor position updated: ({cursor_x}, {cursor_y})")
 
     def update_screenshot_cursor_position(self, x, y):
         self.screenshot_cursor_label.setText(f"Screenshot Cursor: ({x:5d},{y:5d})")
+        self.logger.debug(f"Screenshot cursor position updated: ({x}, {y})")
 
     def on_task_completed(self, success, reason):
         self.update_button_visibility("idle")
         status = "completed successfully" if success else "failed"
-        self.update_log(f"Task {status}. Reason: {reason}")
         self.status_bar.showMessage(f"Task {status}")
 
         if not success:
             QMessageBox.warning(self, "Task Failed", f"The task failed. Reason: {reason}")
+        
+        self.logger.info(f"Task {status}. Reason: {reason}")
 
     def export_conversation(self):
         export_conversation(self, self.conversation)
+        self.logger.info("Conversation exported")
 
     def add_to_conversation(self, item_type, content):
         self.conversation.append((item_type, content))
+        self.logger.debug(f"Added to conversation: {item_type}")
 
     def add_tool_call_to_conversation(self, tool, input_data):
         self.add_to_conversation("tool_call", {"tool": tool, "input": input_data})
+        self.logger.debug(f"Tool call added to conversation: {tool}")
 
     def add_tool_result_to_conversation(self, result):
         self.add_to_conversation("tool_result", result)
+        self.logger.debug("Tool result added to conversation")
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.scale_and_set_pixmap()
+        self.logger.debug("Window resized")
