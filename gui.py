@@ -180,14 +180,14 @@ class MainWindow(QMainWindow):
         self.screenshot_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.screenshot_layout.addWidget(self.screenshot_label)
         
+        self.screenshot_group.setLayout(self.screenshot_layout)
+        self.right_layout.addWidget(self.screenshot_group, 1)
+        
         self.screen_cursor_label = QLabel("Screen Cursor:     (    0,    0)")
         self.screenshot_cursor_label = QLabel("Screenshot Cursor: (    0,    0)")
         
-        self.screenshot_layout.addWidget(self.screen_cursor_label)
-        self.screenshot_layout.addWidget(self.screenshot_cursor_label)
-        
-        self.screenshot_group.setLayout(self.screenshot_layout)
-        self.right_layout.addWidget(self.screenshot_group, 1)
+        self.right_layout.addWidget(self.screen_cursor_label)
+        self.right_layout.addWidget(self.screenshot_cursor_label)
 
     def load_settings(self):
         if os.path.exists(self.settings_file):
