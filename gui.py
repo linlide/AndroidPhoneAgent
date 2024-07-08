@@ -114,23 +114,23 @@ class MainWindow(QMainWindow):
             layout.addSpacing(15)
 
         self.api_key_input = PasswordLineEdit()
-        add_input_field("API Key:", self.api_key_input)
+        add_input_field("API Key", self.api_key_input)
 
         self.model_input = QLineEdit()
-        add_input_field("Model:", self.model_input)
+        add_input_field("Model", self.model_input)
 
         self.max_tokens_input = QLineEdit()
-        add_input_field("Max Tokens:", self.max_tokens_input)
+        add_input_field("Max Tokens", self.max_tokens_input)
 
         self.temperature_input = QLineEdit()
-        add_input_field("Temperature:", self.temperature_input)
+        add_input_field("Temperature", self.temperature_input)
 
         self.max_messages_input = QLineEdit()
-        add_input_field("Max Messages:", self.max_messages_input)
+        add_input_field("Max Messages", self.max_messages_input)
 
         self.task_input = QTextEdit()
         self.task_input.setFixedHeight(100)
-        add_input_field("Task Description:", self.task_input)
+        add_input_field("Task Description", self.task_input)
 
         layout.addSpacing(30)
 
@@ -288,12 +288,14 @@ class MainWindow(QMainWindow):
             self.resume_button.hide()
             self.cancel_button.hide()
             self.export_button.show()
+            self.set_fields_readonly(False)
         elif state == "running":
             self.start_button.hide()
             self.pause_button.show()
             self.resume_button.hide()
             self.cancel_button.show()
             self.export_button.hide()
+            self.set_fields_readonly(True)
         elif state == "paused":
             self.start_button.hide()
             self.pause_button.hide()
@@ -301,6 +303,15 @@ class MainWindow(QMainWindow):
             self.cancel_button.show()
             self.export_button.hide()
         self.logger.debug(f"Button visibility updated to state: {state}")
+
+    def set_fields_readonly(self, disabled):
+        self.api_key_input.setDisabled(disabled)
+        self.model_input.setDisabled(disabled)
+        self.max_tokens_input.setDisabled(disabled)
+        self.temperature_input.setDisabled(disabled)
+        self.max_messages_input.setDisabled(disabled)
+        self.task_input.setDisabled(disabled)
+        self.logger.debug(f"Input fields set to disabled: {disabled}")
 
     def update_screenshot(self, pixmap, cursor_position):
         self.original_pixmap = pixmap
