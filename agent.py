@@ -20,6 +20,8 @@ class iPhoneMirroringAgent(QThread):
         self.conversation = []
         self.task_description = ""
         self.cursor_position = (0, 0)
+        self._is_paused = False
+        self._is_cancelled = False
 
     def capture_screenshot(self):
         try:
@@ -80,16 +82,19 @@ class iPhoneMirroringAgent(QThread):
         })
         self.update_log.emit(f"User: Sent screenshot for analysis. Cursor position: {cursor_position}")
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=self.max_tokens,
-            temperature=self.temperature,
-            system=SYSTEM_PROMPT,
-            tools=TOOLS,
-            messages=self.conversation
-        )
-
-        return response
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                system=SYSTEM_PROMPT,
+                tools=TOOLS,
+                messages=self.conversation
+            )
+            return response
+        except Exception as e:
+            self.update_log.emit(f"Error communicating with Claude: {str(e)}")
+            return None
 
     def run(self):
         screenshot_data, cursor_position = self.capture_screenshot()
@@ -99,7 +104,19 @@ class iPhoneMirroringAgent(QThread):
             return
         message = self.send_to_claude(screenshot_data, cursor_position)
         
-        while True:
+        while not self._is_cancelled:
+            while self._is_paused:
+                time.sleep(0.1)
+                if self._is_cancelled:
+                    break
+            
+            if self._is_cancelled:
+                break
+
+            if message is None:
+                self.task_completed.emit(False, "Failed to communicate with Claude")
+                return
+
             self.update_log.emit("Claude's response:")
             for block in message.content:
                 if block.type == "text":
@@ -122,12 +139,19 @@ class iPhoneMirroringAgent(QThread):
                         self.task_completed.emit(False, reason)
                     break
                 
-                if tool_use.name == "move_cursor":
-                    result = move_cursor(tool_use.input["direction"], tool_use.input["distance"])
-                elif tool_use.name == "click_cursor":
-                    result = click_cursor()
-                
-                self.update_log.emit(f"Executed {tool_use.name}: {result}")
+                try:
+                    if tool_use.name == "move_cursor":
+                        result = move_cursor(tool_use.input["direction"], tool_use.input["distance"])
+                    elif tool_use.name == "click_cursor":
+                        result = click_cursor()
+                    else:
+                        raise ValueError(f"Unknown tool: {tool_use.name}")
+                    
+                    self.update_log.emit(f"Executed {tool_use.name}: {result}")
+                except Exception as e:
+                    self.update_log.emit(f"Error executing {tool_use.name}: {str(e)}")
+                    self.task_completed.emit(False, f"Error executing {tool_use.name}")
+                    return
                 
                 new_screenshot_data, new_cursor_position = self.capture_screenshot()
                 if new_screenshot_data is None:
@@ -141,3 +165,21 @@ class iPhoneMirroringAgent(QThread):
                 message = self.send_to_claude(screenshot_data, cursor_position)
             
             time.sleep(1)
+
+        if self._is_cancelled:
+            self.task_completed.emit(False, "Task cancelled by user")
+
+    def pause(self):
+        self._is_paused = True
+
+    def resume(self):
+        self._is_paused = False
+
+    def cancel(self):
+        self._is_cancelled = True
+
+    def isPaused(self):
+        return self._is_paused
+
+    def isCancelled(self):
+        return self._is_cancelled

@@ -2,11 +2,16 @@ import os
 import json
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QTextEdit, QLabel, QLineEdit, QFormLayout, QGroupBox, QStatusBar,
-                             QSizePolicy)
+                             QSizePolicy, QMessageBox)
 from PyQt5.QtGui import QIcon, QMouseEvent
 from PyQt5.QtCore import Qt, QPoint, QTimer
 import pyautogui
 from agent import iPhoneMirroringAgent
+
+class PasswordLineEdit(QLineEdit):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setEchoMode(QLineEdit.Password)
 
 class ClickableLabel(QLabel):
     def __init__(self, parent=None):
@@ -85,8 +90,8 @@ class MainWindow(QMainWindow):
 
         # Set up timer for real-time cursor position updates
         self.cursor_timer = QTimer(self)
-        self.cursor_timer.timeout.connect(self.update_cursor_position)
-        self.cursor_timer.start(100)  # Update every 100 ms
+        self.cursor_timer.timeout.connect(self.update_screen_cursor_position)
+        self.cursor_timer.start(16)  # Update every 16 ms (approximately 60 FPS)
 
         # Store the original screenshot pixmap
         self.original_pixmap = None
@@ -112,7 +117,7 @@ class MainWindow(QMainWindow):
     def create_input_group(self):
         self.input_group = QGroupBox("Configuration")
         self.form_layout = QFormLayout()
-        self.api_key_input = QLineEdit()
+        self.api_key_input = PasswordLineEdit()
         self.model_input = QLineEdit()
         self.max_tokens_input = QLineEdit()
         self.temperature_input = QLineEdit()
@@ -129,10 +134,31 @@ class MainWindow(QMainWindow):
 
         self.left_layout.addWidget(self.input_group)
 
+        self.button_layout = QHBoxLayout()
         self.start_button = QPushButton("Start Task")
         self.start_button.setIcon(QIcon.fromTheme("media-playback-start"))
         self.start_button.clicked.connect(self.start_task)
-        self.left_layout.addWidget(self.start_button)
+        self.button_layout.addWidget(self.start_button)
+
+        self.pause_button = QPushButton("Pause")
+        self.pause_button.setIcon(QIcon.fromTheme("media-playback-pause"))
+        self.pause_button.clicked.connect(self.pause_task)
+        self.pause_button.hide()
+        self.button_layout.addWidget(self.pause_button)
+
+        self.resume_button = QPushButton("Resume")
+        self.resume_button.setIcon(QIcon.fromTheme("media-playback-start"))
+        self.resume_button.clicked.connect(self.resume_task)
+        self.resume_button.hide()
+        self.button_layout.addWidget(self.resume_button)
+
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setIcon(QIcon.fromTheme("media-playback-stop"))
+        self.cancel_button.clicked.connect(self.cancel_task)
+        self.cancel_button.hide()
+        self.button_layout.addWidget(self.cancel_button)
+
+        self.left_layout.addLayout(self.button_layout)
 
     def create_log_group(self):
         self.log_group = QGroupBox("Log")
@@ -201,25 +227,68 @@ class MainWindow(QMainWindow):
     def start_task(self):
         api_key = self.api_key_input.text()
         model = self.model_input.text()
-        max_tokens = int(self.max_tokens_input.text())
-        temperature = float(self.temperature_input.text())
-        max_messages = int(self.max_messages_input.text())
         task_description = self.task_input.text()
 
-        if api_key and task_description:
-            self.agent = iPhoneMirroringAgent(api_key, model, max_tokens, temperature, max_messages)
-            self.agent.update_log.connect(self.update_log)
-            self.agent.update_screenshot.connect(self.update_screenshot)
-            self.agent.task_completed.connect(self.on_task_completed)
+        if not api_key or not task_description:
+            QMessageBox.warning(self, "Missing Information", "Please enter both API key and task description.")
+            return
 
-            self.agent.task_description = task_description
-            self.log_display.clear()
-            self.update_log(f"Starting task: {task_description}")
-            self.agent.start()
-            self.start_button.setEnabled(False)
+        try:
+            max_tokens = int(self.max_tokens_input.text())
+            temperature = float(self.temperature_input.text())
+            max_messages = int(self.max_messages_input.text())
+        except ValueError:
+            QMessageBox.warning(self, "Invalid Input", "Please enter valid numeric values for Max Tokens, Temperature, and Max Messages.")
+            return
+
+        self.agent = iPhoneMirroringAgent(api_key, model, max_tokens, temperature, max_messages)
+        self.agent.update_log.connect(self.update_log)
+        self.agent.update_screenshot.connect(self.update_screenshot)
+        self.agent.task_completed.connect(self.on_task_completed)
+
+        self.agent.task_description = task_description
+        self.log_display.clear()
+        self.update_log(f"Starting task: {task_description}")
+        self.agent.start()
+        self.update_button_visibility("running")
+        self.status_bar.showMessage("Task in progress...")
+
+    def pause_task(self):
+        if self.agent and self.agent.isRunning():
+            self.agent.pause()
+            self.update_log("Task paused.")
+            self.update_button_visibility("paused")
+            self.status_bar.showMessage("Task paused")
+
+    def resume_task(self):
+        if self.agent and self.agent.isPaused():
+            self.agent.resume()
+            self.update_log("Task resumed.")
+            self.update_button_visibility("running")
             self.status_bar.showMessage("Task in progress...")
-        else:
-            self.update_log("Please enter both API key and task description.")
+
+    def cancel_task(self):
+        if self.agent and self.agent.isRunning():
+            self.agent.cancel()
+            self.update_log("Task cancellation requested.")
+            self.status_bar.showMessage("Cancelling task...")
+
+    def update_button_visibility(self, state):
+        if state == "idle":
+            self.start_button.show()
+            self.pause_button.hide()
+            self.resume_button.hide()
+            self.cancel_button.hide()
+        elif state == "running":
+            self.start_button.hide()
+            self.pause_button.show()
+            self.resume_button.hide()
+            self.cancel_button.show()
+        elif state == "paused":
+            self.start_button.hide()
+            self.pause_button.hide()
+            self.resume_button.show()
+            self.cancel_button.show()
 
     def update_log(self, message):
         self.log_display.append(message)
@@ -227,7 +296,7 @@ class MainWindow(QMainWindow):
     def update_screenshot(self, pixmap, cursor_position):
         self.original_pixmap = pixmap
         self.scale_and_set_pixmap()
-        self.update_cursor_position()
+        self.update_screenshot_cursor_position(cursor_position[0], cursor_position[1])
 
     def scale_and_set_pixmap(self):
         if self.original_pixmap:
@@ -235,7 +304,7 @@ class MainWindow(QMainWindow):
             scaled_pixmap = self.original_pixmap.scaledToWidth(label_width, Qt.SmoothTransformation)
             self.screenshot_label.setPixmap(scaled_pixmap)
 
-    def update_cursor_position(self):
+    def update_screen_cursor_position(self):
         cursor_x, cursor_y = pyautogui.position()
         self.screen_cursor_label.setText(f"Screen Cursor:     ({cursor_x:5d},{cursor_y:5d})")
 
@@ -243,10 +312,13 @@ class MainWindow(QMainWindow):
         self.screenshot_cursor_label.setText(f"Screenshot Cursor: ({x:5d},{y:5d})")
 
     def on_task_completed(self, success, reason):
-        self.start_button.setEnabled(True)
+        self.update_button_visibility("idle")
         status = "completed successfully" if success else "failed"
         self.update_log(f"Task {status}. Reason: {reason}")
         self.status_bar.showMessage(f"Task {status}")
+
+        if not success:
+            QMessageBox.warning(self, "Task Failed", f"The task failed. Reason: {reason}")
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

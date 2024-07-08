@@ -1,0 +1,2 @@
+Implement better visualization of the cursor position and movements on the screenshot.
+Export the list of messages (multi-turn conversation) for the task to markdown file including all the stuffs (text, image, tool call and result, etc.)
