@@ -7,6 +7,7 @@ from PyQt5.QtGui import QIcon, QMouseEvent
 from PyQt5.QtCore import Qt, QPoint, QTimer
 import pyautogui
 from agent import iPhoneMirroringAgent
+from export_utils import export_conversation
 
 class PasswordLineEdit(QLineEdit):
     def __init__(self, *args, **kwargs):
@@ -88,13 +89,13 @@ class MainWindow(QMainWindow):
         self.max_messages_input.textChanged.connect(self.save_settings)
         self.task_input.textChanged.connect(self.save_settings)
 
-        # Set up timer for real-time cursor position updates
         self.cursor_timer = QTimer(self)
         self.cursor_timer.timeout.connect(self.update_screen_cursor_position)
-        self.cursor_timer.start(16)  # Update every 16 ms (approximately 60 FPS)
+        self.cursor_timer.start(16)
 
-        # Store the original screenshot pixmap
         self.original_pixmap = None
+
+        self.conversation = []
 
     def init_ui(self):
         self.central_widget = QWidget()
@@ -157,6 +158,12 @@ class MainWindow(QMainWindow):
         self.cancel_button.clicked.connect(self.cancel_task)
         self.cancel_button.hide()
         self.button_layout.addWidget(self.cancel_button)
+
+        self.export_button = QPushButton("Export Conversation")
+        self.export_button.setIcon(QIcon.fromTheme("document-save"))
+        self.export_button.clicked.connect(self.export_conversation)
+        self.export_button.hide()
+        self.button_layout.addWidget(self.export_button)
 
         self.left_layout.addLayout(self.button_layout)
 
@@ -245,10 +252,15 @@ class MainWindow(QMainWindow):
         self.agent.update_log.connect(self.update_log)
         self.agent.update_screenshot.connect(self.update_screenshot)
         self.agent.task_completed.connect(self.on_task_completed)
+        self.agent.add_to_conversation.connect(self.add_to_conversation)
+        self.agent.add_tool_call.connect(self.add_tool_call_to_conversation)
+        self.agent.add_tool_result.connect(self.add_tool_result_to_conversation)
 
         self.agent.task_description = task_description
         self.log_display.clear()
+        self.conversation.clear()
         self.update_log(f"Starting task: {task_description}")
+        self.conversation.append(("system", f"Task: {task_description}"))
         self.agent.start()
         self.update_button_visibility("running")
         self.status_bar.showMessage("Task in progress...")
@@ -279,24 +291,29 @@ class MainWindow(QMainWindow):
             self.pause_button.hide()
             self.resume_button.hide()
             self.cancel_button.hide()
+            self.export_button.show()
         elif state == "running":
             self.start_button.hide()
             self.pause_button.show()
             self.resume_button.hide()
             self.cancel_button.show()
+            self.export_button.hide()
         elif state == "paused":
             self.start_button.hide()
             self.pause_button.hide()
             self.resume_button.show()
             self.cancel_button.show()
+            self.export_button.hide()
 
     def update_log(self, message):
         self.log_display.append(message)
+        self.conversation.append(("log", message))
 
     def update_screenshot(self, pixmap, cursor_position):
         self.original_pixmap = pixmap
         self.scale_and_set_pixmap()
         self.update_screenshot_cursor_position(cursor_position[0], cursor_position[1])
+        self.conversation.append(("screenshot", pixmap))
 
     def scale_and_set_pixmap(self):
         if self.original_pixmap:
@@ -319,6 +336,18 @@ class MainWindow(QMainWindow):
 
         if not success:
             QMessageBox.warning(self, "Task Failed", f"The task failed. Reason: {reason}")
+
+    def export_conversation(self):
+        export_conversation(self, self.conversation)
+
+    def add_to_conversation(self, item_type, content):
+        self.conversation.append((item_type, content))
+
+    def add_tool_call_to_conversation(self, tool, input_data):
+        self.add_to_conversation("tool_call", {"tool": tool, "input": input_data})
+
+    def add_tool_result_to_conversation(self, result):
+        self.add_to_conversation("tool_result", result)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

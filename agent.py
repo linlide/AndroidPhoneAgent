@@ -9,6 +9,9 @@ class iPhoneMirroringAgent(QThread):
     update_log = pyqtSignal(str)
     update_screenshot = pyqtSignal(QPixmap, tuple)
     task_completed = pyqtSignal(bool, str)
+    add_to_conversation = pyqtSignal(str, object)
+    add_tool_call = pyqtSignal(str, object)
+    add_tool_result = pyqtSignal(str)
 
     def __init__(self, api_key, model, max_tokens, temperature, max_messages):
         super().__init__()
@@ -27,6 +30,7 @@ class iPhoneMirroringAgent(QThread):
         try:
             pixmap, screenshot_data, self.cursor_position = capture_screenshot()
             self.update_screenshot.emit(pixmap, self.cursor_position)
+            self.add_to_conversation.emit("screenshot", pixmap)
             return screenshot_data, self.cursor_position
         except Exception as e:
             self.update_log.emit(f"Error capturing screenshot: {str(e)}")
@@ -60,6 +64,7 @@ class iPhoneMirroringAgent(QThread):
                     }
                 ]
             })
+            self.add_tool_result.emit(tool_result)
         else:
             content.extend([
                 {
@@ -81,6 +86,7 @@ class iPhoneMirroringAgent(QThread):
             "content": content
         })
         self.update_log.emit(f"User: Sent screenshot for analysis. Cursor position: {cursor_position}")
+        self.add_to_conversation.emit("log", f"User: Sent screenshot for analysis. Cursor position: {cursor_position}")
 
         try:
             response = self.client.messages.create(
@@ -121,6 +127,7 @@ class iPhoneMirroringAgent(QThread):
             for block in message.content:
                 if block.type == "text":
                     self.update_log.emit(block.text)
+                    self.add_to_conversation.emit("log", f"Claude: {block.text}")
             
             self.conversation.append({
                 "role": "assistant",
@@ -140,6 +147,7 @@ class iPhoneMirroringAgent(QThread):
                     break
                 
                 try:
+                    self.add_tool_call.emit(tool_use.name, tool_use.input)
                     if tool_use.name == "move_cursor":
                         result = move_cursor(tool_use.input["direction"], tool_use.input["distance"])
                     elif tool_use.name == "click_cursor":
@@ -148,6 +156,7 @@ class iPhoneMirroringAgent(QThread):
                         raise ValueError(f"Unknown tool: {tool_use.name}")
                     
                     self.update_log.emit(f"Executed {tool_use.name}: {result}")
+                    self.add_to_conversation.emit("log", f"Executed {tool_use.name}: {result}")
                 except Exception as e:
                     self.update_log.emit(f"Error executing {tool_use.name}: {str(e)}")
                     self.task_completed.emit(False, f"Error executing {tool_use.name}")
@@ -162,6 +171,7 @@ class iPhoneMirroringAgent(QThread):
                 message = self.send_to_claude(new_screenshot_data, new_cursor_position, tool_use, result)
             else:
                 self.update_log.emit("Claude did not request to use a tool. Continuing...")
+                self.add_to_conversation.emit("log", "Claude did not request to use a tool. Continuing...")
                 message = self.send_to_claude(screenshot_data, cursor_position)
             
             time.sleep(1)
