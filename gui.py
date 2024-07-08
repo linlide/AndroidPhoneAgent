@@ -63,9 +63,6 @@ class MainWindow(QMainWindow):
                 border-radius: 4px;
                 padding: 5px;
             }
-            QLabel {
-                font-weight: bold;
-            }
         """)
 
         self.init_ui()
