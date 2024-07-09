@@ -111,9 +111,17 @@ def generate_html_content(conversation, export_folder):
                 html_content += f"""
                 <div class='tool-result'>
                     <strong>Tool Result:</strong><br>
-                    {item['content'][0]['text']}
-                </div>
                 """
+                for content_item in item['content']:
+                    if content_item['type'] == 'text':
+                        html_content += f"{content_item['text']}<br>"
+                    elif content_item['type'] == 'image':
+                        screenshot_filename = f"tool_result_screenshot_{index}.jpg"
+                        screenshot_path = os.path.join(export_folder, screenshot_filename)
+                        with open(screenshot_path, 'wb') as f:
+                            f.write(content_item['source']['data'].encode('utf-8'))
+                        html_content += f"<img src='{screenshot_filename}' alt='Tool Result Screenshot {index}' class='screenshot'>"
+                html_content += "</div>"
 
         html_content += "</div>"
 
