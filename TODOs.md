@@ -1,1 +1,5 @@
-Implement better visualization of the cursor position and movements on the screenshot.
+## TODOs
+
+1. Handle multiple tool uses -> multiple tool results.
+2. Fix looking up of the latest screenshot.
+3. Fix (screen and screenshot) cursor position calculation and display.
