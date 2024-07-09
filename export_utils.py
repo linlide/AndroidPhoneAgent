@@ -1,9 +1,11 @@
 import os
 import datetime
 import json
+import base64
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
 from anthropic.types.text_block import TextBlock
 from anthropic.types.tool_use_block import ToolUseBlock
+from constants import SYSTEM_PROMPT
 
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -24,7 +26,7 @@ class CustomJSONEncoder(json.JSONEncoder):
                 "type": "image",
                 "source": {
                     "type": obj['source']['type'],
-                    "data": "..."
+                    "data": "..."  # We'll handle image data separately
                 }
             }
         return super().default(obj)
@@ -44,12 +46,19 @@ def export_conversation(parent, agent):
     os.makedirs(export_folder, exist_ok=True)
 
     try:
-        html_content = generate_html_content(agent.conversation, export_folder)
+        parameters = {
+            "Model": agent.model,
+            "Max Tokens": agent.max_tokens,
+            "Temperature": agent.temperature,
+            "Max Messages": agent.max_messages,
+            "Task Description": agent.task_description
+        }
+
+        html_content = generate_html_content(agent.conversation, export_folder, parameters)
 
         with open(os.path.join(export_folder, "conversation.html"), 'w', encoding='utf-8') as f:
             f.write(html_content)
 
-        # Export conversation as JSON with custom encoder
         json_file_path = os.path.join(export_folder, "conversation.json")
         with open(json_file_path, 'w', encoding='utf-8') as json_file:
             json.dump(agent.conversation, json_file, cls=CustomJSONEncoder, indent=2)
@@ -58,7 +67,7 @@ def export_conversation(parent, agent):
     except Exception as e:
         QMessageBox.critical(parent, "Export Failed", f"Failed to export conversation: {str(e)}")
 
-def generate_html_content(conversation, export_folder):
+def generate_html_content(conversation, export_folder, parameters):
     html_content = """
     <!DOCTYPE html>
     <html lang="en">
@@ -69,7 +78,9 @@ def generate_html_content(conversation, export_folder):
         <style>
             body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }
             h1 { color: #333; }
-            .user, .assistant { padding: 10px; margin-bottom: 10px; }
+            .parameters, .system, .user, .assistant { padding: 10px; margin-bottom: 10px; }
+            .parameters { background-color: #f0f0f0; }
+            .system { background-color: #e6ffe6; }
             .user { background-color: #f4f4f4; }
             .assistant { background-color: #e6f3ff; }
             .screenshot { max-width: 100%; height: auto; margin-bottom: 10px; }
@@ -79,6 +90,19 @@ def generate_html_content(conversation, export_folder):
     </head>
     <body>
         <h1>iPhone Mirroring Agent Conversation</h1>
+    """
+
+    html_content += """
+    <div class="parameters">
+    """
+    for key, value in parameters.items():
+        html_content += f"<strong>{key}:</strong> {value}<br>"
+    html_content += "</div>"
+
+    html_content += f"""
+    <div class='system'><strong>System:</strong><br>
+    {SYSTEM_PROMPT}
+    </div>
     """
 
     for index, message in enumerate(conversation):
@@ -97,7 +121,7 @@ def generate_html_content(conversation, export_folder):
                 screenshot_filename = f"screenshot_{index}.jpg"
                 screenshot_path = os.path.join(export_folder, screenshot_filename)
                 with open(screenshot_path, 'wb') as f:
-                    f.write(item['source']['data'].encode('utf-8'))
+                    f.write(base64.b64decode(item['source']['data']))
                 html_content += f"<img src='{screenshot_filename}' alt='Screenshot {index}' class='screenshot'>"
             elif isinstance(item, ToolUseBlock):
                 html_content += f"""
@@ -119,7 +143,7 @@ def generate_html_content(conversation, export_folder):
                         screenshot_filename = f"tool_result_screenshot_{index}.jpg"
                         screenshot_path = os.path.join(export_folder, screenshot_filename)
                         with open(screenshot_path, 'wb') as f:
-                            f.write(content_item['source']['data'].encode('utf-8'))
+                            f.write(base64.b64decode(content_item['source']['data']))
                         html_content += f"<img src='{screenshot_filename}' alt='Tool Result Screenshot {index}' class='screenshot'>"
                 html_content += "</div>"
 

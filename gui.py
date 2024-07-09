@@ -3,7 +3,7 @@ import json
 import logging
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QLineEdit, QTextEdit, QGroupBox, QStatusBar,
-                             QSizePolicy, QMessageBox)
+                             QSizePolicy, QMessageBox, QComboBox)
 from PyQt5.QtGui import QIcon, QMouseEvent
 from PyQt5.QtCore import Qt, QPoint, QTimer
 import pyautogui
@@ -58,7 +58,7 @@ class MainWindow(QMainWindow):
             QPushButton:hover {
                 background-color: #45a049;
             }
-            QLineEdit, QTextEdit {
+            QLineEdit, QTextEdit, QComboBox {
                 border: 1px solid #cccccc;
                 border-radius: 4px;
                 padding: 5px;
@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
         self.load_settings()
 
         self.api_key_input.textChanged.connect(self.save_settings)
-        self.model_input.textChanged.connect(self.save_settings)
+        self.model_input.currentTextChanged.connect(self.save_settings)
         self.max_tokens_input.textChanged.connect(self.save_settings)
         self.temperature_input.textChanged.connect(self.save_settings)
         self.max_messages_input.textChanged.connect(self.save_settings)
@@ -114,7 +114,13 @@ class MainWindow(QMainWindow):
         self.api_key_input = PasswordLineEdit()
         add_input_field("API Key", self.api_key_input)
 
-        self.model_input = QLineEdit()
+        self.model_input = QComboBox()
+        self.model_input.addItems([
+            "claude-3-5-sonnet-20240620",
+            "claude-3-opus-20240229",
+            "claude-3-sonnet-20240229",
+            "claude-3-haiku-20240307"
+        ])
         add_input_field("Model", self.model_input)
 
         self.max_tokens_input = QLineEdit()
@@ -189,7 +195,7 @@ class MainWindow(QMainWindow):
             with open(self.settings_file, "r") as f:
                 settings = json.load(f)
                 self.api_key_input.setText(settings.get("api_key", ""))
-                self.model_input.setText(settings.get("model", "claude-3-5-sonnet-20240620"))
+                self.model_input.setCurrentText(settings.get("model", "claude-3-5-sonnet-20240620"))
                 self.max_tokens_input.setText(str(settings.get("max_tokens", 2048)))
                 self.temperature_input.setText(str(settings.get("temperature", 0.7)))
                 self.max_messages_input.setText(str(settings.get("max_messages", 20)))
@@ -200,7 +206,7 @@ class MainWindow(QMainWindow):
                     self.move(QPoint(pos[0], pos[1]))
             self.logger.info("Settings loaded successfully")
         else:
-            self.model_input.setText("claude-3-5-sonnet-20240620")
+            self.model_input.setCurrentText("claude-3-5-sonnet-20240620")
             self.max_tokens_input.setText("2048")
             self.temperature_input.setText("0.7")
             self.max_messages_input.setText("20")
@@ -209,7 +215,7 @@ class MainWindow(QMainWindow):
     def save_settings(self):
         settings = {
             "api_key": self.api_key_input.text(),
-            "model": self.model_input.text(),
+            "model": self.model_input.currentText(),
             "max_tokens": self.max_tokens_input.text(),
             "temperature": self.temperature_input.text(),
             "max_messages": self.max_messages_input.text(),
@@ -227,7 +233,7 @@ class MainWindow(QMainWindow):
 
     def start_task(self):
         api_key = self.api_key_input.text()
-        model = self.model_input.text()
+        model = self.model_input.currentText()
         task_description = self.task_input.toPlainText()
 
         if not api_key or not task_description:
