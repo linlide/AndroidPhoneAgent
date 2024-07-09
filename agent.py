@@ -1,8 +1,6 @@
 import anthropic
 import time
 import logging
-from PyQt5.QtCore import QThread, pyqtSignal
-from PyQt5.QtGui import QPixmap
 from constants import SYSTEM_PROMPT, TOOLS
 from screen import capture_screenshot, move_cursor, click_cursor
 from anthropic.types import (
@@ -13,12 +11,8 @@ from anthropic.types import (
     ToolUseBlock
 )
 
-class iPhoneMirroringAgent(QThread):
-    update_screenshot = pyqtSignal(QPixmap, tuple)
-    task_completed = pyqtSignal(bool, str)
-
+class iPhoneMirroringAgent:
     def __init__(self, api_key, model, max_tokens, temperature, max_messages):
-        super().__init__()
         self.logger = logging.getLogger(__name__)
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
@@ -34,8 +28,8 @@ class iPhoneMirroringAgent(QThread):
 
     def capture_screenshot(self):
         try:
-            pixmap, screenshot_data, self.cursor_position = capture_screenshot()
-            self.update_screenshot.emit(pixmap, self.cursor_position)
+            screenshot_data, self.cursor_position = capture_screenshot()
+            self.update_screenshot(screenshot_data, self.cursor_position)
             self.logger.debug(f"Screenshot captured. Cursor position: {self.cursor_position}")
             return screenshot_data, self.cursor_position
         except Exception as e:
@@ -45,7 +39,7 @@ class iPhoneMirroringAgent(QThread):
     def send_to_claude(self, screenshot_data, cursor_position, tool_use=None, tool_result=None):
         if len(self.conversation) >= self.max_messages:
             error_message = f"Conversation exceeded maximum length of {self.max_messages} messages. Exiting task as failed."
-            self.task_completed.emit(False, error_message)
+            self.task_completed(False, error_message)
             self.logger.warning(error_message)
             return None
 
@@ -59,7 +53,7 @@ class iPhoneMirroringAgent(QThread):
                         content=[
                             TextBlockParam(
                                 type="text",
-                                text=f"{tool_result}\nHere's the latest screenshot after running the tool for the task: {self.task_description}\nCurrent cursor position: {cursor_position}\nPlease analyze the image and suggest the next action."
+                                text=f"{tool_result}\nHere's the latest screenshot after running the tool for the task: {self.task_description}\nCurrent cursor position: {cursor_position}.\nPlease analyze the image and suggest the next action."
                             ),
                             ImageBlockParam(
                                 type="image",
@@ -79,7 +73,7 @@ class iPhoneMirroringAgent(QThread):
                 content=[
                     TextBlockParam(
                         type="text",
-                        text=f"Here's the current screenshot for the task: {self.task_description}\nCurrent cursor position: {cursor_position}\nPlease analyze the image and suggest the next action."
+                        text=f"Here's the current screenshot for the task: {self.task_description}\nCurrent cursor position: {cursor_position}.\nPlease analyze the image and suggest the next action."
                     ),
                     ImageBlockParam(
                         type="image",
@@ -110,11 +104,14 @@ class iPhoneMirroringAgent(QThread):
             self.logger.error(f"Error communicating with Claude: {str(e)}")
             return None
 
-    def run(self):
+    def run(self, update_screenshot, task_completed):
+        self.update_screenshot = update_screenshot
+        self.task_completed = task_completed
+
         self.logger.info(f"Starting task: {self.task_description}")
         screenshot_data, cursor_position = self.capture_screenshot()
         if screenshot_data is None:
-            self.task_completed.emit(False, "Screenshot capture failed")
+            self.task_completed(False, "Screenshot capture failed")
             self.logger.error("Failed to capture screenshot. Exiting task.")
             return
         message = self.send_to_claude(screenshot_data, cursor_position)
@@ -129,7 +126,7 @@ class iPhoneMirroringAgent(QThread):
                 break
 
             if message is None:
-                self.task_completed.emit(False, "Failed to communicate with Claude")
+                self.task_completed(False, "Failed to communicate with Claude")
                 self.logger.error("Failed to communicate with Claude")
                 return
 
@@ -147,9 +144,9 @@ class iPhoneMirroringAgent(QThread):
                     status = tool_use.input["status"]
                     reason = tool_use.input["reason"]
                     if status == "completed":
-                        self.task_completed.emit(True, reason)
+                        self.task_completed(True, reason)
                     else:
-                        self.task_completed.emit(False, reason)
+                        self.task_completed(False, reason)
                     self.logger.info(f"Task {status}. Reason: {reason}")
                     break
                 
@@ -163,13 +160,13 @@ class iPhoneMirroringAgent(QThread):
                     
                     self.logger.info(f"Executed {tool_use.name}: {result}")
                 except Exception as e:
-                    self.task_completed.emit(False, f"Error executing {tool_use.name}")
+                    self.task_completed(False, f"Error executing {tool_use.name}")
                     self.logger.error(f"Error executing {tool_use.name}: {str(e)}")
                     return
                 
                 new_screenshot_data, new_cursor_position = self.capture_screenshot()
                 if new_screenshot_data is None:
-                    self.task_completed.emit(False, "Screenshot capture failed")
+                    self.task_completed(False, "Screenshot capture failed")
                     self.logger.error("Failed to capture screenshot after tool execution. Exiting task.")
                     return
                 
@@ -181,7 +178,7 @@ class iPhoneMirroringAgent(QThread):
             time.sleep(1)
 
         if self._is_cancelled:
-            self.task_completed.emit(False, "Task cancelled by user")
+            self.task_completed(False, "Task cancelled by user")
             self.logger.info("Task cancelled by user")
 
     def pause(self):

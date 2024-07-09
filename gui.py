@@ -4,9 +4,10 @@ import logging
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QLineEdit, QTextEdit, QGroupBox, QStatusBar,
                              QSizePolicy, QMessageBox, QComboBox)
-from PyQt5.QtGui import QIcon, QMouseEvent
-from PyQt5.QtCore import Qt, QPoint, QTimer
+from PyQt5.QtGui import QIcon, QMouseEvent, QPixmap
+from PyQt5.QtCore import Qt, QPoint, QTimer, QThread, pyqtSignal
 import pyautogui
+import base64
 from agent import iPhoneMirroringAgent
 from export_utils import export_conversation
 
@@ -32,6 +33,17 @@ class ClickableLabel(QLabel):
             y = int(event.y() * y_scale)
             
             self.parent.update_screenshot_cursor_position(x, y)
+
+class AgentThread(QThread):
+    update_screenshot_signal = pyqtSignal(str, tuple)
+    task_completed_signal = pyqtSignal(bool, str)
+
+    def __init__(self, agent):
+        super().__init__()
+        self.agent = agent
+
+    def run(self):
+        self.agent.run(self.update_screenshot_signal.emit, self.task_completed_signal.emit)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -67,6 +79,7 @@ class MainWindow(QMainWindow):
 
         self.init_ui()
         self.agent = None
+        self.agent_thread = None
         self.settings_file = "settings.json"
         self.load_settings()
 
@@ -250,18 +263,22 @@ class MainWindow(QMainWindow):
             self.logger.warning("Task start attempted with invalid numeric inputs")
             return
 
-        self.agent = iPhoneMirroringAgent(api_key, model, max_tokens, temperature, max_messages)
-        self.agent.update_screenshot.connect(self.update_screenshot)
-        self.agent.task_completed.connect(self.on_task_completed)
-
+        self.agent = iPhoneMirroringAgent(
+            api_key, model, max_tokens, temperature, max_messages
+        )
         self.agent.task_description = task_description
-        self.agent.start()
+        
+        self.agent_thread = AgentThread(self.agent)
+        self.agent_thread.update_screenshot_signal.connect(self.on_update_screenshot)
+        self.agent_thread.task_completed_signal.connect(self.on_task_completed)
+        self.agent_thread.start()
+        
         self.update_button_visibility("running")
         self.status_bar.showMessage("Task in progress...")
         self.logger.info(f"Task started: {task_description}")
 
     def pause_task(self):
-        if self.agent and self.agent.isRunning():
+        if self.agent and self.agent_thread.isRunning():
             self.agent.pause()
             self.update_button_visibility("paused")
             self.status_bar.showMessage("Task paused")
@@ -275,7 +292,7 @@ class MainWindow(QMainWindow):
             self.logger.info("Task resumed")
 
     def cancel_task(self):
-        if self.agent and self.agent.isRunning():
+        if self.agent and self.agent_thread.isRunning():
             self.agent.cancel()
             self.status_bar.showMessage("Cancelling task...")
             self.logger.info("Task cancellation requested")
@@ -312,7 +329,9 @@ class MainWindow(QMainWindow):
         self.task_input.setDisabled(disabled)
         self.logger.debug(f"Input fields set to disabled: {disabled}")
 
-    def update_screenshot(self, pixmap, cursor_position):
+    def on_update_screenshot(self, screenshot_data, cursor_position):
+        pixmap = QPixmap()
+        pixmap.loadFromData(base64.b64decode(screenshot_data))
         self.original_pixmap = pixmap
         self.scale_and_set_pixmap()
         self.update_screenshot_cursor_position(cursor_position[0], cursor_position[1])

@@ -21,14 +21,6 @@ class CustomJSONEncoder(json.JSONEncoder):
                 "name": obj.name,
                 "input": obj.input
             }
-        elif isinstance(obj, dict) and obj.get('type') == 'image':
-            return {
-                "type": "image",
-                "source": {
-                    "type": obj['source']['type'],
-                    "data": "..."  # We'll handle image data separately
-                }
-            }
         return super().default(obj)
 
 def export_conversation(parent, agent):
@@ -117,6 +109,8 @@ def generate_html_content(conversation, export_folder, parameters):
         for item in content:
             if isinstance(item, TextBlock):
                 html_content += f"{item.text}<br>"
+            elif isinstance(item, dict) and item['type'] == 'text':
+                html_content += f"{item['text']}<br>"
             elif isinstance(item, dict) and item['type'] == 'image':
                 screenshot_filename = f"screenshot_{index}.jpg"
                 screenshot_path = os.path.join(export_folder, screenshot_filename)

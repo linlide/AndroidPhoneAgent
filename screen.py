@@ -4,7 +4,6 @@ import base64
 import pyautogui
 import logging
 from PIL import Image, ImageDraw
-from PyQt5.QtGui import QPixmap
 import time
 
 logger = logging.getLogger(__name__)
@@ -54,10 +53,10 @@ def capture_screenshot():
             screenshot.save(img_byte_arr, format='JPEG', quality=quality)
             img_byte_arr = img_byte_arr.getvalue()
         
-        pixmap = QPixmap()
-        pixmap.loadFromData(img_byte_arr)
+        base64_screenshot = base64.b64encode(img_byte_arr).decode('utf-8')
+        
         logger.info(f"Screenshot captured successfully. Cursor position: ({cursor_x}, {cursor_y})")
-        return pixmap, base64.b64encode(img_byte_arr).decode("utf-8"), (cursor_x, cursor_y)
+        return base64_screenshot, (cursor_x, cursor_y)
     except Exception as e:
         logger.error(f"Error capturing screenshot: {str(e)}")
         raise Exception(f"Error capturing screenshot: {str(e)}")
