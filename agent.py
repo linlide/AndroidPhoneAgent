@@ -1,3 +1,4 @@
+import json
 import anthropic
 import time
 import logging
@@ -5,13 +6,17 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap
 from constants import SYSTEM_PROMPT, TOOLS
 from screen import capture_screenshot, move_cursor, click_cursor
+from anthropic.types import (
+    MessageParam,
+    TextBlockParam,
+    ImageBlockParam,
+    ToolResultBlockParam,
+    ToolUseBlock
+)
 
 class iPhoneMirroringAgent(QThread):
     update_screenshot = pyqtSignal(QPixmap, tuple)
     task_completed = pyqtSignal(bool, str)
-    add_to_conversation = pyqtSignal(str, object)
-    add_tool_call = pyqtSignal(str, object)
-    add_tool_result = pyqtSignal(str)
 
     def __init__(self, api_key, model, max_tokens, temperature, max_messages):
         super().__init__()
@@ -21,7 +26,7 @@ class iPhoneMirroringAgent(QThread):
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.max_messages = max_messages
-        self.conversation = []
+        self.conversation: list[MessageParam] = []
         self.task_description = ""
         self.cursor_position = (0, 0)
         self._is_paused = False
@@ -32,7 +37,6 @@ class iPhoneMirroringAgent(QThread):
         try:
             pixmap, screenshot_data, self.cursor_position = capture_screenshot()
             self.update_screenshot.emit(pixmap, self.cursor_position)
-            self.add_to_conversation.emit("screenshot", pixmap)
             self.logger.debug(f"Screenshot captured. Cursor position: {self.cursor_position}")
             return screenshot_data, self.cursor_position
         except Exception as e:
@@ -46,49 +50,50 @@ class iPhoneMirroringAgent(QThread):
             self.logger.warning(error_message)
             return None
 
-        content = []
-        
         if tool_use and tool_result:
-            content.append({
-                "type": "tool_result",
-                "tool_use_id": tool_use.id,
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"{tool_result}\nHere's the latest screenshot after running the tool for the task: {self.task_description}\nCurrent cursor position: {cursor_position}\nPlease analyze the image and suggest the next action."
-                    },
-                    {
-                        "type": "image",
-                        "source": {
+            message = MessageParam(
+                role="user",
+                content=[
+                    ToolResultBlockParam(
+                        type="tool_result",
+                        tool_use_id=tool_use.id,
+                        content=[
+                            TextBlockParam(
+                                type="text",
+                                text=f"{tool_result}\nHere's the latest screenshot after running the tool for the task: {self.task_description}\nCurrent cursor position: {cursor_position}\nPlease analyze the image and suggest the next action."
+                            ),
+                            ImageBlockParam(
+                                type="image",
+                                source={
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": screenshot_data
+                                }
+                            )
+                        ]
+                    )
+                ]
+            )
+        else:
+            message = MessageParam(
+                role="user",
+                content=[
+                    TextBlockParam(
+                        type="text",
+                        text=f"Here's the current screenshot for the task: {self.task_description}\nCurrent cursor position: {cursor_position}\nPlease analyze the image and suggest the next action."
+                    ),
+                    ImageBlockParam(
+                        type="image",
+                        source={
                             "type": "base64",
                             "media_type": "image/jpeg",
                             "data": screenshot_data
                         }
-                    }
+                    )
                 ]
-            })
-            self.add_tool_result.emit(tool_result)
-        else:
-            content.extend([
-                {
-                    "type": "text",
-                    "text": f"Here's the current screenshot for the task: {self.task_description}\nCurrent cursor position: {cursor_position}\nPlease analyze the image and suggest the next action."
-                },
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/jpeg",
-                        "data": screenshot_data
-                    }
-                }
-            ])
+            )
         
-        self.conversation.append({
-            "role": "user",
-            "content": content
-        })
-        self.add_to_conversation.emit("log", f"User: Sent screenshot for analysis. Cursor position: {cursor_position}")
+        self.conversation.append(message)
         self.logger.info(f"Sent screenshot for analysis. Cursor position: {cursor_position}")
 
         try:
@@ -130,17 +135,14 @@ class iPhoneMirroringAgent(QThread):
                 return
 
             self.logger.info("Claude's response received")
-            for block in message.content:
-                if block.type == "text":
-                    self.add_to_conversation.emit("log", f"Claude: {block.text}")
             
-            self.conversation.append({
-                "role": "assistant",
-                "content": message.content
-            })
+            self.conversation.append(MessageParam(
+                role="assistant",
+                content=message.content
+            ))
             
             if message.stop_reason == "tool_use":
-                tool_use = next(block for block in message.content if block.type == "tool_use")
+                tool_use = next(block for block in message.content if isinstance(block, ToolUseBlock))
                 
                 if tool_use.name == "done":
                     status = tool_use.input["status"]
@@ -153,7 +155,6 @@ class iPhoneMirroringAgent(QThread):
                     break
                 
                 try:
-                    self.add_tool_call.emit(tool_use.name, tool_use.input)
                     if tool_use.name == "move_cursor":
                         result = move_cursor(tool_use.input["direction"], tool_use.input["distance"])
                     elif tool_use.name == "click_cursor":
@@ -161,7 +162,6 @@ class iPhoneMirroringAgent(QThread):
                     else:
                         raise ValueError(f"Unknown tool: {tool_use.name}")
                     
-                    self.add_to_conversation.emit("log", f"Executed {tool_use.name}: {result}")
                     self.logger.info(f"Executed {tool_use.name}: {result}")
                 except Exception as e:
                     self.task_completed.emit(False, f"Error executing {tool_use.name}")
@@ -176,7 +176,6 @@ class iPhoneMirroringAgent(QThread):
                 
                 message = self.send_to_claude(new_screenshot_data, new_cursor_position, tool_use, result)
             else:
-                self.add_to_conversation.emit("log", "Claude did not request to use a tool. Continuing...")
                 self.logger.info("Claude did not request to use a tool. Continuing...")
                 message = self.send_to_claude(screenshot_data, cursor_position)
             

@@ -83,8 +83,6 @@ class MainWindow(QMainWindow):
 
         self.original_pixmap = None
 
-        self.conversation = []
-
     def init_ui(self):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -249,13 +247,8 @@ class MainWindow(QMainWindow):
         self.agent = iPhoneMirroringAgent(api_key, model, max_tokens, temperature, max_messages)
         self.agent.update_screenshot.connect(self.update_screenshot)
         self.agent.task_completed.connect(self.on_task_completed)
-        self.agent.add_to_conversation.connect(self.add_to_conversation)
-        self.agent.add_tool_call.connect(self.add_tool_call_to_conversation)
-        self.agent.add_tool_result.connect(self.add_tool_result_to_conversation)
 
         self.agent.task_description = task_description
-        self.conversation.clear()
-        self.conversation.append(("system", f"Task: {task_description}"))
         self.agent.start()
         self.update_button_visibility("running")
         self.status_bar.showMessage("Task in progress...")
@@ -317,7 +310,6 @@ class MainWindow(QMainWindow):
         self.original_pixmap = pixmap
         self.scale_and_set_pixmap()
         self.update_screenshot_cursor_position(cursor_position[0], cursor_position[1])
-        self.conversation.append(("screenshot", pixmap))
         self.logger.debug(f"Screenshot updated. Cursor position: {cursor_position}")
 
     def scale_and_set_pixmap(self):
@@ -347,20 +339,11 @@ class MainWindow(QMainWindow):
         self.logger.info(f"Task {status}. Reason: {reason}")
 
     def export_conversation(self):
-        export_conversation(self, self.conversation)
+        if self.agent:
+            export_conversation(self, self.agent)
+        else:
+            QMessageBox.warning(self, "No Agent", "There is no active agent with a conversation to export.")
         self.logger.info("Conversation exported")
-
-    def add_to_conversation(self, item_type, content):
-        self.conversation.append((item_type, content))
-        self.logger.debug(f"Added to conversation: {item_type}")
-
-    def add_tool_call_to_conversation(self, tool, input_data):
-        self.add_to_conversation("tool_call", {"tool": tool, "input": input_data})
-        self.logger.debug(f"Tool call added to conversation: {tool}")
-
-    def add_tool_result_to_conversation(self, result):
-        self.add_to_conversation("tool_result", result)
-        self.logger.debug("Tool result added to conversation")
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
