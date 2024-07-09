@@ -41,3 +41,7 @@ venv.bak/
 conversation_*.md
 *.log
 settings.json
+iphone_mirroring_conversation_*/
+
+# Misc
+.DS_Store
