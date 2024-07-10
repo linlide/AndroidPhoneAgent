@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPu
                              QLabel, QLineEdit, QTextEdit, QGroupBox, QStatusBar,
                              QSizePolicy, QMessageBox, QComboBox, QDoubleSpinBox, QSpinBox,
                              QFileDialog)
-from PyQt5.QtGui import QIcon, QMouseEvent, QPixmap
+from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtCore import Qt, QPoint, QTimer, QThread, pyqtSignal
 import pyautogui
 import base64
@@ -21,26 +21,8 @@ class PasswordLineEdit(QLineEdit):
         super().__init__(*args, **kwargs)
         self.setEchoMode(QLineEdit.Password)
 
-class ClickableLabel(QLabel):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setMouseTracking(True)
-        self.parent = parent
-
-    def mouseMoveEvent(self, event: QMouseEvent):
-        if self.pixmap() and self.parent:
-            pixmap_size = self.pixmap().size()
-            label_size = self.size()
-            x_scale = pixmap_size.width() / label_size.width()
-            y_scale = pixmap_size.height() / label_size.height()
-
-            x = int(event.x() * x_scale)
-            y = int(event.y() * y_scale)
-            
-            self.parent.update_screenshot_cursor_position(x, y)
-
 class AgentThread(QThread):
-    update_screenshot_signal = pyqtSignal(str, tuple)
+    update_screenshot_signal = pyqtSignal(str)
     task_completed_signal = pyqtSignal(bool, str)
     update_status_signal = pyqtSignal(str)
 
@@ -52,13 +34,13 @@ class AgentThread(QThread):
         self.agent.run(self.update_screenshot_signal.emit, self.task_completed_signal.emit, self.update_status_signal.emit)
 
 class ScreenshotThread(QThread):
-    screenshot_taken = pyqtSignal(str, tuple)
+    screenshot_taken = pyqtSignal(str)
     screenshot_error = pyqtSignal(str)
 
     def run(self):
         try:
-            screenshot_data, cursor_position = screen.capture_screenshot()
-            self.screenshot_taken.emit(screenshot_data, cursor_position)
+            screenshot_data, _ = screen.capture_screenshot()
+            self.screenshot_taken.emit(screenshot_data)
         except Exception as e:
             self.screenshot_error.emit(str(e))
 
@@ -217,7 +199,7 @@ class MainWindow(QMainWindow):
         self.screenshot_group = QGroupBox("Current Screenshot")
         self.screenshot_layout = QVBoxLayout()
         
-        self.screenshot_label = ClickableLabel(self)
+        self.screenshot_label = QLabel()
         self.screenshot_label.setAlignment(Qt.AlignCenter)
         self.screenshot_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.screenshot_layout.addWidget(self.screenshot_label)
@@ -238,10 +220,7 @@ class MainWindow(QMainWindow):
         self.right_layout.addWidget(self.screenshot_group, 1)
         
         self.screen_cursor_label = QLabel("Screen Cursor:     (    0,    0)")
-        self.screenshot_cursor_label = QLabel("Screenshot Cursor: (    0,    0)")
-        
         self.right_layout.addWidget(self.screen_cursor_label)
-        self.right_layout.addWidget(self.screenshot_cursor_label)
 
     def take_current_screenshot(self):
         self.screenshot_button.setDisabled(True)
@@ -255,8 +234,8 @@ class MainWindow(QMainWindow):
         self.screenshot_thread.finished.connect(self.on_screenshot_thread_finished)
         self.screenshot_thread.start()
 
-    def on_screenshot_taken(self, screenshot_data, cursor_position):
-        self.on_update_screenshot(screenshot_data, cursor_position)
+    def on_screenshot_taken(self, screenshot_data):
+        self.on_update_screenshot(screenshot_data)
         self.logger.info("Current screenshot taken")
         self.status_bar.showMessage("Screenshot updated", 3000)
         self.set_fields_readonly(False)
@@ -404,14 +383,13 @@ class MainWindow(QMainWindow):
         self.task_input.setDisabled(disabled)
         self.logger.debug(f"Input fields set to disabled: {disabled}")
 
-    def on_update_screenshot(self, screenshot_data, cursor_position):
+    def on_update_screenshot(self, screenshot_data):
         pixmap = QPixmap()
         pixmap.loadFromData(base64.b64decode(screenshot_data))
         self.original_pixmap = pixmap
         self.scale_and_set_pixmap()
-        self.update_screenshot_cursor_position(cursor_position[0], cursor_position[1])
         self.save_screenshot_button.setDisabled(False)
-        self.logger.debug(f"Screenshot updated. Cursor position: {cursor_position}")
+        self.logger.debug("Screenshot updated")
 
     def scale_and_set_pixmap(self):
         if self.original_pixmap:
@@ -424,10 +402,6 @@ class MainWindow(QMainWindow):
         cursor_x, cursor_y = pyautogui.position()
         self.screen_cursor_label.setText(f"Screen Cursor:     ({cursor_x:5d},{cursor_y:5d})")
         self.logger.debug(f"Screen cursor position updated: ({cursor_x}, {cursor_y})")
-
-    def update_screenshot_cursor_position(self, x, y):
-        self.screenshot_cursor_label.setText(f"Screenshot Cursor: ({x:5d},{y:5d})")
-        self.logger.debug(f"Screenshot cursor position updated: ({x}, {y})")
 
     def on_task_completed(self, success, reason):
         self.update_button_visibility("idle")
