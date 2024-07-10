@@ -3,7 +3,8 @@ import json
 import logging
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QLineEdit, QTextEdit, QGroupBox, QStatusBar,
-                             QSizePolicy, QMessageBox, QComboBox, QDoubleSpinBox, QSpinBox)
+                             QSizePolicy, QMessageBox, QComboBox, QDoubleSpinBox, QSpinBox,
+                             QFileDialog)
 from PyQt5.QtGui import QIcon, QMouseEvent, QPixmap
 from PyQt5.QtCore import Qt, QPoint, QTimer, QThread, pyqtSignal
 import pyautogui
@@ -13,6 +14,7 @@ from export_utils import export_conversation
 from constants import (DEFAULT_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, 
                        DEFAULT_MAX_MESSAGES, AVAILABLE_MODELS)
 import screen
+from datetime import datetime
 
 class PasswordLineEdit(QLineEdit):
     def __init__(self, *args, **kwargs):
@@ -84,10 +86,18 @@ class MainWindow(QMainWindow):
             QPushButton:hover {
                 background-color: #45a049;
             }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
             QLineEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {
                 border: 1px solid #cccccc;
                 border-radius: 4px;
                 padding: 5px;
+            }
+            QLineEdit:disabled, QTextEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {
+                background-color: #e0e0e0;
+                color: #888888;
             }
         """)
 
@@ -211,9 +221,17 @@ class MainWindow(QMainWindow):
         self.screenshot_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.screenshot_layout.addWidget(self.screenshot_label)
         
+        self.screenshot_buttons_layout = QHBoxLayout()
         self.screenshot_button = QPushButton("Take Screenshot")
         self.screenshot_button.clicked.connect(self.take_current_screenshot)
-        self.screenshot_layout.addWidget(self.screenshot_button, alignment=Qt.AlignRight)
+        self.screenshot_buttons_layout.addWidget(self.screenshot_button)
+        
+        self.save_screenshot_button = QPushButton("Save Screenshot")
+        self.save_screenshot_button.clicked.connect(self.save_screenshot)
+        self.save_screenshot_button.hide()
+        self.screenshot_buttons_layout.addWidget(self.save_screenshot_button)
+        
+        self.screenshot_layout.addLayout(self.screenshot_buttons_layout)
         
         self.screenshot_group.setLayout(self.screenshot_layout)
         self.right_layout.addWidget(self.screenshot_group, 1)
@@ -226,6 +244,7 @@ class MainWindow(QMainWindow):
 
     def take_current_screenshot(self):
         self.screenshot_button.setDisabled(True)
+        self.save_screenshot_button.setDisabled(True)
         self.set_fields_readonly(True)
         self.status_bar.showMessage("Taking screenshot...")
         
@@ -240,6 +259,7 @@ class MainWindow(QMainWindow):
         self.logger.info("Current screenshot taken")
         self.status_bar.showMessage("Screenshot updated", 3000)
         self.set_fields_readonly(False)
+        self.save_screenshot_button.show()
 
     def on_screenshot_error(self, error_message):
         self.logger.error(f"Error taking current screenshot: {error_message}")
@@ -248,6 +268,20 @@ class MainWindow(QMainWindow):
 
     def on_screenshot_thread_finished(self):
         self.screenshot_button.setDisabled(False)
+        self.save_screenshot_button.setDisabled(False)
+
+    def save_screenshot(self):
+        if self.original_pixmap:
+            default_filename = f"screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+            file_path, _ = QFileDialog.getSaveFileName(self, "Save Screenshot", default_filename, "JPEG Files (*.jpg *.jpeg)")
+            
+            if file_path:
+                self.original_pixmap.save(file_path, "JPEG")
+                self.status_bar.showMessage(f"Screenshot saved as {file_path}", 3000)
+                self.logger.info(f"Screenshot saved: {file_path}")
+        else:
+            QMessageBox.warning(self, "No Screenshot", "There is no screenshot to save.")
+            self.logger.warning("Attempted to save screenshot when none available")
 
     def load_settings(self):
         if os.path.exists(self.settings_file):
