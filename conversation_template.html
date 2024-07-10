@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iPhone Mirroring Agent Conversation</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }
+        h1 { color: #333; }
+        .parameters, .system, .user, .assistant, .tool-use, .tool-result {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 10px;
+        }
+        .parameters { background-color: #f0f0f0; }
+        .system { background-color: #e6ffe6; }
+        .user { background-color: #f4f4f4; }
+        .assistant { background-color: #e6f3ff; }
+        .screenshot { max-width: 100%; height: auto; margin-bottom: 10px; border-radius: 5px; }
+        .tool-use { background-color: #fff0e6; }
+        .tool-result { background-color: #e6ffe6; }
+    </style>
+</head>
+<body>
+    <h1>iPhone Mirroring Agent Conversation</h1>
+    
+    <div class="parameters">
+        {% for key, value in parameters.items() %}
+            <strong>{{ key }}:</strong> {{ value }}<br>
+        {% endfor %}
+    </div>
+
+    <div class='system'><strong>System:</strong><br>
+        {{ system_prompt }}
+    </div>
+
+    {% for message in conversation %}
+        {% if message.role == 'user' %}
+            <div class='user'><strong>User:</strong><br>
+        {% elif message.role == 'assistant' %}
+            <div class='assistant'><strong>Assistant:</strong><br>
+        {% endif %}
+
+        {% for item in message.content %}
+            {% if item.type == 'text' %}
+                {{ item.text }}<br>
+            {% elif item.type == 'image' %}
+                <img src='{{ item.filename }}' alt='Screenshot' class='screenshot'>
+            {% elif item.type == 'tool_use' %}
+                <div class='tool-use'>
+                    <strong>Tool Use:</strong><br>
+                    Tool: {{ item.name }}<br>
+                    Input: {{ item.input | tojson }}
+                </div>
+            {% elif item.type == 'tool_result' %}
+                <div class='tool-result'>
+                    <strong>Tool Result:</strong><br>
+                    {% for content_item in item.content %}
+                        {% if content_item.type == 'text' %}
+                            {{ content_item.text }}<br>
+                        {% elif content_item.type == 'image' %}
+                            <img src='{{ content_item.filename }}' alt='Tool Result Screenshot' class='screenshot'>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endfor %}
+        </div>
+    {% endfor %}
+</body>
+</html>

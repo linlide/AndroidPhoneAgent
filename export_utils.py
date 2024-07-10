@@ -3,9 +3,9 @@ import datetime
 import json
 import base64
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
-from anthropic.types.text_block import TextBlock
-from anthropic.types.tool_use_block import ToolUseBlock
+from anthropic.types import TextBlock, ToolUseBlock
 from constants import SYSTEM_PROMPT
+from jinja2 import Environment, FileSystemLoader
 
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -60,96 +60,56 @@ def export_conversation(parent, agent):
         QMessageBox.critical(parent, "Export Failed", f"Failed to export conversation: {str(e)}")
 
 def generate_html_content(conversation, export_folder, parameters):
-    html_content = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>iPhone Mirroring Agent Conversation</title>
-        <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }
-            h1 { color: #333; }
-            .parameters, .system, .user, .assistant, .tool-use, .tool-result {
-                padding: 10px;
-                margin-bottom: 10px;
-                border-radius: 10px;
-            }
-            .parameters { background-color: #f0f0f0; }
-            .system { background-color: #e6ffe6; }
-            .user { background-color: #f4f4f4; }
-            .assistant { background-color: #e6f3ff; }
-            .screenshot { max-width: 100%; height: auto; margin-bottom: 10px; border-radius: 5px; }
-            .tool-use { background-color: #fff0e6; }
-            .tool-result { background-color: #e6ffe6; }
-        </style>
-    </head>
-    <body>
-        <h1>iPhone Mirroring Agent Conversation</h1>
-    """
+    env = Environment(loader=FileSystemLoader('.'))
+    template = env.get_template('conversation_template.html')
 
-    html_content += """
-    <div class="parameters">
-    """
-    for key, value in parameters.items():
-        html_content += f"<strong>{key}:</strong> {value}<br>"
-    html_content += "</div>"
+    conversation_data = []
+    screenshot_count = 0
 
-    html_content += f"""
-    <div class='system'><strong>System:</strong><br>
-    {SYSTEM_PROMPT}
-    </div>
-    """
-
-    for index, message in enumerate(conversation):
-        role = message.get('role', '')
-        content = message.get('content', [])
-
-        if role == 'user':
-            html_content += f"<div class='user'><strong>User:</strong><br>"
-        elif role == 'assistant':
-            html_content += f"<div class='assistant'><strong>Assistant:</strong><br>"
-
-        for item in content:
-            if isinstance(item, TextBlock):
-                html_content += f"{item.text}<br>"
-            elif isinstance(item, dict) and item['type'] == 'text':
-                html_content += f"{item['text']}<br>"
-            elif isinstance(item, dict) and item['type'] == 'image':
-                screenshot_filename = f"screenshot_{index}.jpg"
+    for message in conversation:
+        content = []
+        for item in message.get('content', []):
+            if isinstance(item, TextBlock) or (isinstance(item, dict) and item.get('type') == 'text'):
+                content.append({
+                    "type": "text",
+                    "text": item.text if isinstance(item, TextBlock) else item['text']
+                })
+            elif isinstance(item, dict) and item.get('type') == 'image':
+                screenshot_filename = f"screenshot_{screenshot_count}.jpg"
                 screenshot_path = os.path.join(export_folder, screenshot_filename)
                 with open(screenshot_path, 'wb') as f:
                     f.write(base64.b64decode(item['source']['data']))
-                html_content += f"<img src='{screenshot_filename}' alt='Screenshot {index}' class='screenshot'>"
+                content.append({"type": "image", "filename": screenshot_filename})
+                screenshot_count += 1
             elif isinstance(item, ToolUseBlock):
-                html_content += f"""
-                <div class='tool-use'>
-                    <strong>Tool Use:</strong><br>
-                    Tool: {item.name}<br>
-                    Input: {json.dumps(item.input)}
-                </div>
-                """
+                content.append({
+                    "type": "tool_use",
+                    "name": item.name,
+                    "input": item.input
+                })
             elif isinstance(item, dict) and item['type'] == 'tool_result':
-                html_content += f"""
-                <div class='tool-result'>
-                    <strong>Tool Result:</strong><br>
-                """
+                tool_result_content = []
                 for content_item in item['content']:
                     if content_item['type'] == 'text':
-                        html_content += f"{content_item['text']}<br>"
+                        tool_result_content.append({"type": "text", "text": content_item['text']})
                     elif content_item['type'] == 'image':
-                        screenshot_filename = f"tool_result_screenshot_{index}.jpg"
+                        screenshot_filename = f"screenshot_{screenshot_count}.jpg"
                         screenshot_path = os.path.join(export_folder, screenshot_filename)
                         with open(screenshot_path, 'wb') as f:
                             f.write(base64.b64decode(content_item['source']['data']))
-                        html_content += f"<img src='{screenshot_filename}' alt='Tool Result Screenshot {index}' class='screenshot'>"
-                html_content += "</div>"
+                        tool_result_content.append({"type": "image", "filename": screenshot_filename})
+                        screenshot_count += 1
+                content.append({"type": "tool_result", "content": tool_result_content})
 
-        html_content += "</div>"
+        conversation_data.append({
+            "role": message.get('role', ''),
+            "content": content
+        })
 
-    html_content += """
-    </body>
-    </html>
-    """
+    html_content = template.render(
+        parameters=parameters,
+        system_prompt=SYSTEM_PROMPT,
+        conversation=conversation_data
+    )
 
     return html_content

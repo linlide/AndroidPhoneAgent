@@ -4,3 +4,4 @@ PyQt5==5.15.10
 Pillow==10.4.0
 pywinctl==0.2.0
 pygame==2.6.0
+Jinja2==3.1.4
