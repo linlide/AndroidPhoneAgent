@@ -83,3 +83,14 @@ TOOLS = [
         }
     }
 ]
+
+DEFAULT_MODEL = "claude-3-5-sonnet-20240620"
+DEFAULT_MAX_TOKENS = 2048
+DEFAULT_TEMPERATURE = 0.7
+DEFAULT_MAX_MESSAGES = 20
+AVAILABLE_MODELS = [
+    "claude-3-5-sonnet-20240620",
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+    "claude-3-haiku-20240307"
+]

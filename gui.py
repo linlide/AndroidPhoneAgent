@@ -3,13 +3,15 @@ import json
 import logging
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QLineEdit, QTextEdit, QGroupBox, QStatusBar,
-                             QSizePolicy, QMessageBox, QComboBox)
+                             QSizePolicy, QMessageBox, QComboBox, QDoubleSpinBox, QSpinBox)
 from PyQt5.QtGui import QIcon, QMouseEvent, QPixmap
 from PyQt5.QtCore import Qt, QPoint, QTimer, QThread, pyqtSignal
 import pyautogui
 import base64
 from agent import iPhoneMirroringAgent
 from export_utils import export_conversation
+from constants import (DEFAULT_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, 
+                       DEFAULT_MAX_MESSAGES, AVAILABLE_MODELS)
 
 class PasswordLineEdit(QLineEdit):
     def __init__(self, *args, **kwargs):
@@ -70,7 +72,7 @@ class MainWindow(QMainWindow):
             QPushButton:hover {
                 background-color: #45a049;
             }
-            QLineEdit, QTextEdit, QComboBox {
+            QLineEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {
                 border: 1px solid #cccccc;
                 border-radius: 4px;
                 padding: 5px;
@@ -85,9 +87,9 @@ class MainWindow(QMainWindow):
 
         self.api_key_input.textChanged.connect(self.save_settings)
         self.model_input.currentTextChanged.connect(self.save_settings)
-        self.max_tokens_input.textChanged.connect(self.save_settings)
-        self.temperature_input.textChanged.connect(self.save_settings)
-        self.max_messages_input.textChanged.connect(self.save_settings)
+        self.max_tokens_input.valueChanged.connect(self.save_settings)
+        self.temperature_input.valueChanged.connect(self.save_settings)
+        self.max_messages_input.valueChanged.connect(self.save_settings)
         self.task_input.textChanged.connect(self.save_settings)
 
         self.cursor_timer = QTimer(self)
@@ -128,21 +130,24 @@ class MainWindow(QMainWindow):
         add_input_field("API Key", self.api_key_input)
 
         self.model_input = QComboBox()
-        self.model_input.addItems([
-            "claude-3-5-sonnet-20240620",
-            "claude-3-opus-20240229",
-            "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307"
-        ])
+        self.model_input.addItems(AVAILABLE_MODELS)
+        self.model_input.setCurrentText(DEFAULT_MODEL)
         add_input_field("Model", self.model_input)
 
-        self.max_tokens_input = QLineEdit()
+        self.max_tokens_input = QSpinBox()
+        self.max_tokens_input.setRange(1, 100000)
+        self.max_tokens_input.setValue(DEFAULT_MAX_TOKENS)
         add_input_field("Max Tokens", self.max_tokens_input)
 
-        self.temperature_input = QLineEdit()
+        self.temperature_input = QDoubleSpinBox()
+        self.temperature_input.setRange(0.0, 1.0)
+        self.temperature_input.setSingleStep(0.1)
+        self.temperature_input.setValue(DEFAULT_TEMPERATURE)
         add_input_field("Temperature", self.temperature_input)
 
-        self.max_messages_input = QLineEdit()
+        self.max_messages_input = QSpinBox()
+        self.max_messages_input.setRange(1, 1000)
+        self.max_messages_input.setValue(DEFAULT_MAX_MESSAGES)
         add_input_field("Max Messages", self.max_messages_input)
 
         self.task_input = QTextEdit()
@@ -208,10 +213,10 @@ class MainWindow(QMainWindow):
             with open(self.settings_file, "r") as f:
                 settings = json.load(f)
                 self.api_key_input.setText(settings.get("api_key", ""))
-                self.model_input.setCurrentText(settings.get("model", "claude-3-5-sonnet-20240620"))
-                self.max_tokens_input.setText(str(settings.get("max_tokens", 2048)))
-                self.temperature_input.setText(str(settings.get("temperature", 0.7)))
-                self.max_messages_input.setText(str(settings.get("max_messages", 20)))
+                self.model_input.setCurrentText(settings.get("model", DEFAULT_MODEL))
+                self.max_tokens_input.setValue(int(settings.get("max_tokens", DEFAULT_MAX_TOKENS)))
+                self.temperature_input.setValue(float(settings.get("temperature", DEFAULT_TEMPERATURE)))
+                self.max_messages_input.setValue(int(settings.get("max_messages", DEFAULT_MAX_MESSAGES)))
                 self.task_input.setPlainText(settings.get("task_description", ""))
                 
                 pos = settings.get("window_position", None)
@@ -219,19 +224,19 @@ class MainWindow(QMainWindow):
                     self.move(QPoint(pos[0], pos[1]))
             self.logger.info("Settings loaded successfully")
         else:
-            self.model_input.setCurrentText("claude-3-5-sonnet-20240620")
-            self.max_tokens_input.setText("2048")
-            self.temperature_input.setText("0.7")
-            self.max_messages_input.setText("20")
+            self.model_input.setCurrentText(DEFAULT_MODEL)
+            self.max_tokens_input.setValue(DEFAULT_MAX_TOKENS)
+            self.temperature_input.setValue(DEFAULT_TEMPERATURE)
+            self.max_messages_input.setValue(DEFAULT_MAX_MESSAGES)
             self.logger.info("Default settings applied")
 
     def save_settings(self):
         settings = {
             "api_key": self.api_key_input.text(),
             "model": self.model_input.currentText(),
-            "max_tokens": self.max_tokens_input.text(),
-            "temperature": self.temperature_input.text(),
-            "max_messages": self.max_messages_input.text(),
+            "max_tokens": self.max_tokens_input.value(),
+            "temperature": self.temperature_input.value(),
+            "max_messages": self.max_messages_input.value(),
             "task_description": self.task_input.toPlainText(),
             "window_position": [self.pos().x(), self.pos().y()]
         }
@@ -254,14 +259,9 @@ class MainWindow(QMainWindow):
             self.logger.warning("Task start attempted with missing information")
             return
 
-        try:
-            max_tokens = int(self.max_tokens_input.text())
-            temperature = float(self.temperature_input.text())
-            max_messages = int(self.max_messages_input.text())
-        except ValueError:
-            QMessageBox.warning(self, "Invalid Input", "Please enter valid numeric values for Max Tokens, Temperature, and Max Messages.")
-            self.logger.warning("Task start attempted with invalid numeric inputs")
-            return
+        max_tokens = self.max_tokens_input.value()
+        temperature = self.temperature_input.value()
+        max_messages = self.max_messages_input.value()
 
         self.agent = iPhoneMirroringAgent(
             api_key, model, max_tokens, temperature, max_messages
