@@ -226,6 +226,7 @@ class MainWindow(QMainWindow):
 
     def take_current_screenshot(self):
         self.screenshot_button.setDisabled(True)
+        self.set_fields_readonly(True)
         self.status_bar.showMessage("Taking screenshot...")
         
         self.screenshot_thread = ScreenshotThread()
@@ -238,10 +239,12 @@ class MainWindow(QMainWindow):
         self.on_update_screenshot(screenshot_data, cursor_position)
         self.logger.info("Current screenshot taken")
         self.status_bar.showMessage("Screenshot updated", 3000)
+        self.set_fields_readonly(False)
 
     def on_screenshot_error(self, error_message):
         self.logger.error(f"Error taking current screenshot: {error_message}")
         QMessageBox.warning(self, "Screenshot Error", f"Failed to take current screenshot: {error_message}")
+        self.set_fields_readonly(False)
 
     def on_screenshot_thread_finished(self):
         self.screenshot_button.setDisabled(False)
