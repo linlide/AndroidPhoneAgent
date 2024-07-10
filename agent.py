@@ -24,6 +24,7 @@ class iPhoneMirroringAgent:
         self.cursor_position = (0, 0)
         self._is_paused = False
         self._is_cancelled = False
+        self.update_status = None
         self.logger.info("iPhoneMirroringAgent initialized")
 
     def capture_screenshot(self):
@@ -83,16 +84,19 @@ class iPhoneMirroringAgent:
             self.logger.error(f"Error communicating with Claude: {str(e)}")
             return None
 
-    def run(self, update_screenshot, task_completed):
+    def run(self, update_screenshot, task_completed, update_status):
         self.update_screenshot = update_screenshot
         self.task_completed = task_completed
+        self.update_status = update_status
 
         self.logger.info(f"Starting task: {self.task_description}")
+        self.update_status("Capturing initial screenshot...")
         screenshot_data, cursor_position = self.capture_screenshot()
         if screenshot_data is None:
             self.task_completed(False, "Screenshot capture failed")
             self.logger.error("Failed to capture screenshot. Exiting task.")
             return
+        self.update_status("Analyzing initial screenshot...")
         message = self.send_to_claude(screenshot_data, cursor_position)
         
         while not self._is_cancelled:
@@ -110,6 +114,7 @@ class iPhoneMirroringAgent:
                 return
 
             self.logger.info("Claude's response received")
+            self.update_status("Received response from Claude, processing...")
             
             self.conversation.append(MessageParam(
                 role="assistant",
@@ -131,6 +136,7 @@ class iPhoneMirroringAgent:
                         return
                     
                     try:
+                        self.update_status(f"Executing {tool_use.name}...")
                         if tool_use.name == "move_cursor":
                             result = move_cursor(tool_use.input["direction"], tool_use.input["distance"])
                         elif tool_use.name == "click_cursor":
@@ -150,15 +156,18 @@ class iPhoneMirroringAgent:
                         self.logger.error(f"Error executing {tool_use.name}: {str(e)}")
                         return
                 
+                self.update_status("Capturing new screenshot after action...")
                 new_screenshot_data, new_cursor_position = self.capture_screenshot()
                 if new_screenshot_data is None:
                     self.task_completed(False, "Screenshot capture failed")
                     self.logger.error("Failed to capture screenshot after tool execution. Exiting task.")
                     return
                 
+                self.update_status("Analyzing new screenshot...")
                 message = self.send_to_claude(new_screenshot_data, new_cursor_position, tool_results)
             else:
                 self.logger.info("Claude did not request to use any tools. Continuing...")
+                self.update_status("Analyzing current state...")
                 message = self.send_to_claude(screenshot_data, cursor_position)
             
             time.sleep(1)

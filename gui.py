@@ -42,13 +42,14 @@ class ClickableLabel(QLabel):
 class AgentThread(QThread):
     update_screenshot_signal = pyqtSignal(str, tuple)
     task_completed_signal = pyqtSignal(bool, str)
+    update_status_signal = pyqtSignal(str)
 
     def __init__(self, agent):
         super().__init__()
         self.agent = agent
 
     def run(self):
-        self.agent.run(self.update_screenshot_signal.emit, self.task_completed_signal.emit)
+        self.agent.run(self.update_screenshot_signal.emit, self.task_completed_signal.emit, self.update_status_signal.emit)
 
 class ScreenshotThread(QThread):
     screenshot_taken = pyqtSignal(str, tuple)
@@ -346,10 +347,11 @@ class MainWindow(QMainWindow):
         self.agent_thread = AgentThread(self.agent)
         self.agent_thread.update_screenshot_signal.connect(self.on_update_screenshot)
         self.agent_thread.task_completed_signal.connect(self.on_task_completed)
+        self.agent_thread.update_status_signal.connect(self.update_status)
         self.agent_thread.start()
         
         self.update_button_visibility("running")
-        self.status_bar.showMessage("Task in progress...")
+        self.status_bar.showMessage("Task started...")
         self.logger.info(f"Task started: {task_description}")
 
     def pause_task(self):
@@ -363,7 +365,7 @@ class MainWindow(QMainWindow):
         if self.agent and self.agent.isPaused():
             self.agent.resume()
             self.update_button_visibility("running")
-            self.status_bar.showMessage("Task in progress...")
+            self.status_bar.showMessage("Task resumed...")
             self.logger.info("Task resumed")
 
     def cancel_task(self):
@@ -449,3 +451,7 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         self.scale_and_set_pixmap()
         self.logger.debug("Window resized")
+
+    def update_status(self, status):
+        self.status_bar.showMessage(status)
+        self.logger.debug(f"Status updated: {status}")
