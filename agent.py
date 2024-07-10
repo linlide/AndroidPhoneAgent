@@ -53,17 +53,21 @@ class iPhoneMirroringAgent:
                         content=[
                             TextBlockParam(
                                 type="text",
-                                text=f"{tool_result}\nHere's the latest screenshot after running the tool for the task: {self.task_description}\nCurrent cursor position: {cursor_position}.\nPlease analyze the image and suggest the next action."
-                            ),
-                            ImageBlockParam(
-                                type="image",
-                                source={
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": screenshot_data
-                                }
+                                text=f"{tool_result}"
                             )
                         ]
+                    ),
+                    TextBlockParam(
+                        type="text",
+                        text=f"Here's the latest screenshot after running the tool for the task: {self.task_description}\nCurrent cursor position: {cursor_position}.\nPlease analyze the image and suggest the next action."
+                    ),
+                    ImageBlockParam(
+                        type="image",
+                        source={
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": screenshot_data
+                        }
                     )
                 ]
             )
