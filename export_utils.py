@@ -70,14 +70,18 @@ def generate_html_content(conversation, export_folder, parameters):
         <style>
             body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }
             h1 { color: #333; }
-            .parameters, .system, .user, .assistant { padding: 10px; margin-bottom: 10px; }
+            .parameters, .system, .user, .assistant, .tool-use, .tool-result {
+                padding: 10px;
+                margin-bottom: 10px;
+                border-radius: 10px;
+            }
             .parameters { background-color: #f0f0f0; }
             .system { background-color: #e6ffe6; }
             .user { background-color: #f4f4f4; }
             .assistant { background-color: #e6f3ff; }
-            .screenshot { max-width: 100%; height: auto; margin-bottom: 10px; }
-            .tool-use { background-color: #fff0e6; padding: 10px; margin-bottom: 10px; }
-            .tool-result { background-color: #e6ffe6; padding: 10px; margin-bottom: 10px; }
+            .screenshot { max-width: 100%; height: auto; margin-bottom: 10px; border-radius: 5px; }
+            .tool-use { background-color: #fff0e6; }
+            .tool-result { background-color: #e6ffe6; }
         </style>
     </head>
     <body>
