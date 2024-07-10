@@ -36,62 +36,37 @@ class iPhoneMirroringAgent:
             self.logger.error(f"Error capturing screenshot: {str(e)}")
             return None, None
 
-    def send_to_claude(self, screenshot_data, cursor_position, tool_use=None, tool_result=None):
+    def send_to_claude(self, screenshot_data, cursor_position, tool_results=None):
         if len(self.conversation) >= self.max_messages:
             error_message = f"Conversation exceeded maximum length of {self.max_messages} messages. Exiting task as failed."
             self.task_completed(False, error_message)
             self.logger.warning(error_message)
             return None
 
-        if tool_use and tool_result:
-            message = MessageParam(
-                role="user",
-                content=[
-                    ToolResultBlockParam(
-                        type="tool_result",
-                        tool_use_id=tool_use.id,
-                        content=[
-                            TextBlockParam(
-                                type="text",
-                                text=f"{tool_result}"
-                            )
-                        ]
-                    ),
-                    TextBlockParam(
-                        type="text",
-                        text=f"Here's the latest screenshot after running the tool for the task: {self.task_description}\nCurrent cursor position: {cursor_position}.\nPlease analyze the image and suggest the next action."
-                    ),
-                    ImageBlockParam(
-                        type="image",
-                        source={
-                            "type": "base64",
-                            "media_type": "image/jpeg",
-                            "data": screenshot_data
-                        }
-                    )
-                ]
+        content = []
+        
+        if tool_results:
+            content.extend(tool_results)
+
+        content.extend([
+            TextBlockParam(
+                type="text",
+                text=f"Here's the latest screenshot after running the tool(s) for the task: {self.task_description}\nCurrent cursor position: {cursor_position}.\nPlease analyze the image and suggest the next action."
+            ),
+            ImageBlockParam(
+                type="image",
+                source={
+                    "type": "base64",
+                    "media_type": "image/jpeg",
+                    "data": screenshot_data
+                }
             )
-        else:
-            message = MessageParam(
-                role="user",
-                content=[
-                    TextBlockParam(
-                        type="text",
-                        text=f"Here's the current screenshot for the task: {self.task_description}\nCurrent cursor position: {cursor_position}.\nPlease analyze the image and suggest the next action."
-                    ),
-                    ImageBlockParam(
-                        type="image",
-                        source={
-                            "type": "base64",
-                            "media_type": "image/jpeg",
-                            "data": screenshot_data
-                        }
-                    )
-                ]
-            )
+        ])
+
+        message = MessageParam(role="user", content=content)
         
         self.conversation.append(message)
-        self.logger.info(f"Sent screenshot for analysis. Cursor position: {cursor_position}")
+        self.logger.info(f"Sent tool results and screenshot for analysis. Cursor position: {cursor_position}")
 
         try:
             response = self.client.messages.create(
@@ -142,31 +117,38 @@ class iPhoneMirroringAgent:
             ))
             
             if message.stop_reason == "tool_use":
-                tool_use = next(block for block in message.content if isinstance(block, ToolUseBlock))
-                
-                if tool_use.name == "done":
-                    status = tool_use.input["status"]
-                    reason = tool_use.input["reason"]
-                    if status == "completed":
-                        self.task_completed(True, reason)
-                    else:
-                        self.task_completed(False, reason)
-                    self.logger.info(f"Task {status}. Reason: {reason}")
-                    break
-                
-                try:
-                    if tool_use.name == "move_cursor":
-                        result = move_cursor(tool_use.input["direction"], tool_use.input["distance"])
-                    elif tool_use.name == "click_cursor":
-                        result = click_cursor()
-                    else:
-                        raise ValueError(f"Unknown tool: {tool_use.name}")
+                tool_uses = [block for block in message.content if isinstance(block, ToolUseBlock)]
+                tool_results = []
+                for tool_use in tool_uses:
+                    if tool_use.name == "done":
+                        status = tool_use.input["status"]
+                        reason = tool_use.input["reason"]
+                        if status == "completed":
+                            self.task_completed(True, reason)
+                        else:
+                            self.task_completed(False, reason)
+                        self.logger.info(f"Task {status}. Reason: {reason}")
+                        return
                     
-                    self.logger.info(f"Executed {tool_use.name}: {result}")
-                except Exception as e:
-                    self.task_completed(False, f"Error executing {tool_use.name}")
-                    self.logger.error(f"Error executing {tool_use.name}: {str(e)}")
-                    return
+                    try:
+                        if tool_use.name == "move_cursor":
+                            result = move_cursor(tool_use.input["direction"], tool_use.input["distance"])
+                        elif tool_use.name == "click_cursor":
+                            result = click_cursor()
+                        else:
+                            raise ValueError(f"Unknown tool: {tool_use.name}")
+                        
+                        tool_results.append(ToolResultBlockParam(
+                            type="tool_result",
+                            tool_use_id=tool_use.id,
+                            content=[TextBlockParam(type="text", text=f"{result}")]
+                        ))
+                        
+                        self.logger.info(f"Executed {tool_use.name}: {result}")
+                    except Exception as e:
+                        self.task_completed(False, f"Error executing {tool_use.name}")
+                        self.logger.error(f"Error executing {tool_use.name}: {str(e)}")
+                        return
                 
                 new_screenshot_data, new_cursor_position = self.capture_screenshot()
                 if new_screenshot_data is None:
@@ -174,9 +156,9 @@ class iPhoneMirroringAgent:
                     self.logger.error("Failed to capture screenshot after tool execution. Exiting task.")
                     return
                 
-                message = self.send_to_claude(new_screenshot_data, new_cursor_position, tool_use, result)
+                message = self.send_to_claude(new_screenshot_data, new_cursor_position, tool_results)
             else:
-                self.logger.info("Claude did not request to use a tool. Continuing...")
+                self.logger.info("Claude did not request to use any tools. Continuing...")
                 message = self.send_to_claude(screenshot_data, cursor_position)
             
             time.sleep(1)
