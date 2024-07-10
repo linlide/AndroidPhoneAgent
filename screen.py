@@ -11,16 +11,35 @@ logger = logging.getLogger(__name__)
 def capture_screenshot():
     try:
         logger.info("Capturing screenshot")
+        screenshots_folder = os.path.join(os.path.expanduser("~"), "Dropbox", "Screenshots")
+        
+        initial_screenshots = set(f for f in os.listdir(screenshots_folder) if f.startswith("Screenshot"))
+        
         pyautogui.hotkey('command', 'shift', '3')
         
-        time.sleep(5)
+        max_attempts = 3
+        attempt = 0
+        new_screenshot_path = None
         
-        screenshots_folder = os.path.join(os.path.expanduser("~"), "Dropbox", "Screenshots")
-        screenshots = [f for f in os.listdir(screenshots_folder) if f.startswith("Screenshot")]
-        screenshots.sort(key=lambda x: os.path.getmtime(os.path.join(screenshots_folder, x)))
-        latest_screenshot_path = os.path.join(screenshots_folder, screenshots[-1])
+        while attempt < max_attempts:
+            time.sleep(2)
+            current_screenshots = set(f for f in os.listdir(screenshots_folder) if f.startswith("Screenshot"))
+            new_screenshots = current_screenshots - initial_screenshots
+            
+            if new_screenshots:
+                new_screenshot = max(new_screenshots, key=lambda x: os.path.getmtime(os.path.join(screenshots_folder, x)))
+                new_screenshot_path = os.path.join(screenshots_folder, new_screenshot)
+                logger.info(f"New screenshot found: {new_screenshot_path}")
+                break
+            
+            attempt += 1
+            logger.info(f"No new screenshot found. Attempt {attempt} of {max_attempts}")
         
-        screenshot = Image.open(latest_screenshot_path)
+        if not new_screenshot_path:
+            logger.warning("No new screenshot found after multiple attempts. Taking a new screenshot.")
+            return capture_screenshot()
+        
+        screenshot = Image.open(new_screenshot_path)
         
         if screenshot.mode == 'RGBA':
             screenshot = screenshot.convert('RGB')

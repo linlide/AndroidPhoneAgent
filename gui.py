@@ -12,6 +12,7 @@ from agent import iPhoneMirroringAgent
 from export_utils import export_conversation
 from constants import (DEFAULT_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, 
                        DEFAULT_MAX_MESSAGES, AVAILABLE_MODELS)
+import screen
 
 class PasswordLineEdit(QLineEdit):
     def __init__(self, *args, **kwargs):
@@ -46,6 +47,17 @@ class AgentThread(QThread):
 
     def run(self):
         self.agent.run(self.update_screenshot_signal.emit, self.task_completed_signal.emit)
+
+class ScreenshotThread(QThread):
+    screenshot_taken = pyqtSignal(str, tuple)
+    screenshot_error = pyqtSignal(str)
+
+    def run(self):
+        try:
+            screenshot_data, cursor_position = screen.capture_screenshot()
+            self.screenshot_taken.emit(screenshot_data, cursor_position)
+        except Exception as e:
+            self.screenshot_error.emit(str(e))
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -199,6 +211,10 @@ class MainWindow(QMainWindow):
         self.screenshot_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.screenshot_layout.addWidget(self.screenshot_label)
         
+        self.screenshot_button = QPushButton("Take Screenshot")
+        self.screenshot_button.clicked.connect(self.take_current_screenshot)
+        self.screenshot_layout.addWidget(self.screenshot_button, alignment=Qt.AlignRight)
+        
         self.screenshot_group.setLayout(self.screenshot_layout)
         self.right_layout.addWidget(self.screenshot_group, 1)
         
@@ -207,6 +223,28 @@ class MainWindow(QMainWindow):
         
         self.right_layout.addWidget(self.screen_cursor_label)
         self.right_layout.addWidget(self.screenshot_cursor_label)
+
+    def take_current_screenshot(self):
+        self.screenshot_button.setDisabled(True)
+        self.status_bar.showMessage("Taking screenshot...")
+        
+        self.screenshot_thread = ScreenshotThread()
+        self.screenshot_thread.screenshot_taken.connect(self.on_screenshot_taken)
+        self.screenshot_thread.screenshot_error.connect(self.on_screenshot_error)
+        self.screenshot_thread.finished.connect(self.on_screenshot_thread_finished)
+        self.screenshot_thread.start()
+
+    def on_screenshot_taken(self, screenshot_data, cursor_position):
+        self.on_update_screenshot(screenshot_data, cursor_position)
+        self.logger.info("Current screenshot taken")
+        self.status_bar.showMessage("Screenshot updated", 3000)
+
+    def on_screenshot_error(self, error_message):
+        self.logger.error(f"Error taking current screenshot: {error_message}")
+        QMessageBox.warning(self, "Screenshot Error", f"Failed to take current screenshot: {error_message}")
+
+    def on_screenshot_thread_finished(self):
+        self.screenshot_button.setDisabled(False)
 
     def load_settings(self):
         if os.path.exists(self.settings_file):
