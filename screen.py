@@ -8,6 +8,38 @@ import time
 
 logger = logging.getLogger(__name__)
 
+def draw_cursor(screenshot, cursor_x, cursor_y):
+    draw = ImageDraw.Draw(screenshot)
+    cursor_radius = 10
+    cursor_color = "red"
+    draw.ellipse([cursor_x - cursor_radius, cursor_y - cursor_radius,
+                  cursor_x + cursor_radius, cursor_y + cursor_radius],
+                 outline=cursor_color, width=2)
+    
+    line_length = 20
+    draw.line([cursor_x - line_length, cursor_y,
+               cursor_x + line_length, cursor_y],
+              fill=cursor_color, width=2)
+    draw.line([cursor_x, cursor_y - line_length,
+               cursor_x, cursor_y + line_length],
+              fill=cursor_color, width=2)
+    
+    return screenshot
+
+def compress_image(image, max_size=5*1024*1024, initial_quality=95):
+    img_byte_arr = io.BytesIO()
+    quality = initial_quality
+    image.save(img_byte_arr, format='JPEG', quality=quality)
+    img_byte_arr = img_byte_arr.getvalue()
+    
+    while len(img_byte_arr) > max_size:
+        quality = int(quality * 0.9)
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format='JPEG', quality=quality)
+        img_byte_arr = img_byte_arr.getvalue()
+    
+    return img_byte_arr
+
 def capture_screenshot():
     try:
         logger.info("Capturing screenshot")
@@ -46,31 +78,9 @@ def capture_screenshot():
         
         cursor_x, cursor_y = pyautogui.position()
         
-        draw = ImageDraw.Draw(screenshot)
-        cursor_radius = 10
-        cursor_color = "red"
-        draw.ellipse([cursor_x - cursor_radius, cursor_y - cursor_radius,
-                      cursor_x + cursor_radius, cursor_y + cursor_radius],
-                     outline=cursor_color, width=2)
+        screenshot = draw_cursor(screenshot, cursor_x, cursor_y)
         
-        line_length = 20
-        draw.line([cursor_x - line_length, cursor_y,
-                   cursor_x + line_length, cursor_y],
-                  fill=cursor_color, width=2)
-        draw.line([cursor_x, cursor_y - line_length,
-                   cursor_x, cursor_y + line_length],
-                  fill=cursor_color, width=2)
-        
-        img_byte_arr = io.BytesIO()
-        quality = 95
-        screenshot.save(img_byte_arr, format='JPEG', quality=quality)
-        img_byte_arr = img_byte_arr.getvalue()
-        
-        while len(img_byte_arr) > 5 * 1024 * 1024:
-            quality = int(quality * 0.9)
-            img_byte_arr = io.BytesIO()
-            screenshot.save(img_byte_arr, format='JPEG', quality=quality)
-            img_byte_arr = img_byte_arr.getvalue()
+        img_byte_arr = compress_image(screenshot)
         
         base64_screenshot = base64.b64encode(img_byte_arr).decode('utf-8')
         
