@@ -229,7 +229,7 @@ class MainWindow(QMainWindow):
         
         self.save_screenshot_button = QPushButton("Save Screenshot")
         self.save_screenshot_button.clicked.connect(self.save_screenshot)
-        self.save_screenshot_button.hide()
+        self.save_screenshot_button.setDisabled(True)
         self.screenshot_buttons_layout.addWidget(self.save_screenshot_button)
         
         self.screenshot_layout.addLayout(self.screenshot_buttons_layout)
@@ -260,7 +260,6 @@ class MainWindow(QMainWindow):
         self.logger.info("Current screenshot taken")
         self.status_bar.showMessage("Screenshot updated", 3000)
         self.set_fields_readonly(False)
-        self.save_screenshot_button.show()
 
     def on_screenshot_error(self, error_message):
         self.logger.error(f"Error taking current screenshot: {error_message}")
@@ -269,7 +268,6 @@ class MainWindow(QMainWindow):
 
     def on_screenshot_thread_finished(self):
         self.screenshot_button.setDisabled(False)
-        self.save_screenshot_button.setDisabled(False)
 
     def save_screenshot(self):
         if self.original_pixmap:
@@ -412,6 +410,7 @@ class MainWindow(QMainWindow):
         self.original_pixmap = pixmap
         self.scale_and_set_pixmap()
         self.update_screenshot_cursor_position(cursor_position[0], cursor_position[1])
+        self.save_screenshot_button.setDisabled(False)
         self.logger.debug(f"Screenshot updated. Cursor position: {cursor_position}")
 
     def scale_and_set_pixmap(self):
