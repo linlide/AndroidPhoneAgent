@@ -8,6 +8,8 @@ import time
 
 logger = logging.getLogger(__name__)
 
+screen_width, screen_height = pyautogui.size()
+
 def draw_cursor(screenshot, cursor_x, cursor_y):
     draw = ImageDraw.Draw(screenshot)
     cursor_radius = 10
@@ -72,6 +74,8 @@ def capture_screenshot():
             return capture_screenshot()
         
         screenshot = Image.open(new_screenshot_path)
+        
+        screenshot = screenshot.resize((screen_width, screen_height), Image.LANCZOS)
         
         if screenshot.mode == 'RGBA':
             screenshot = screenshot.convert('RGB')

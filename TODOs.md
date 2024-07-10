@@ -1,5 +1,10 @@
 ## TODOs
 
-1. Fix (screen and screenshot) cursor position calculation and display.
-2. Use absolute cursor move instead of relative cursor move.
-3. Use grounded SAM to help locate the interaction target on the screenshot.
+1. Use absolute cursor move instead of relative cursor move.
+2. Use grounded SAM to help locate the interaction target on the screenshot.
+3. Use a more sophisticated color palette for different message types.
+4. Implement a chat-like layout with user messages aligned to the right and assistant messages to the left.
+5. Add avatars or icons for user and assistant messages.
+6. Create a fixed header with conversation details and a scrollable message area.
+7. Add timestamps to each message.
+8. Use icons to represent different types of content (e.g., text, image, tool use).

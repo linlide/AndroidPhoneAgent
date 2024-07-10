@@ -30,7 +30,7 @@ class iPhoneMirroringAgent:
     def capture_screenshot(self):
         try:
             screenshot_data, self.cursor_position = capture_screenshot()
-            self.update_screenshot(screenshot_data, self.cursor_position)
+            self.update_screenshot(screenshot_data)
             self.logger.debug(f"Screenshot captured. Cursor position: {self.cursor_position}")
             return screenshot_data, self.cursor_position
         except Exception as e:
@@ -48,11 +48,14 @@ class iPhoneMirroringAgent:
         
         if tool_results:
             content.extend(tool_results)
+            screenshot_message = f"Here's the latest screenshot after running the tool(s) for the task: {self.task_description}"
+        else:
+            screenshot_message = f"Here's the initial screenshot for the task: {self.task_description}"
 
         content.extend([
             TextBlockParam(
                 type="text",
-                text=f"Here's the latest screenshot after running the tool(s) for the task: {self.task_description}\nCurrent cursor position: {cursor_position}.\nPlease analyze the image and suggest the next action."
+                text=f"{screenshot_message}\nCurrent cursor position: {cursor_position}. The cursor is represented by a red circle with crosshairs on the screenshot.\nPlease analyze the image and suggest the next action."
             ),
             ImageBlockParam(
                 type="image",
@@ -67,7 +70,7 @@ class iPhoneMirroringAgent:
         message = MessageParam(role="user", content=content)
         
         self.conversation.append(message)
-        self.logger.info(f"Sent tool results and screenshot for analysis. Cursor position: {cursor_position}")
+        self.logger.info(f"Sent {'tool results and ' if tool_results else ''}screenshot for analysis. Cursor position: {cursor_position}")
 
         try:
             response = self.client.messages.create(
