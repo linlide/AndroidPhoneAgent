@@ -30,7 +30,6 @@ class iPhoneMirroringAgent:
     def capture_screenshot(self):
         try:
             screenshot_data, self.cursor_position = capture_screenshot()
-            self.update_screenshot(screenshot_data)
             self.logger.debug(f"Screenshot captured. Cursor position: {self.cursor_position}")
             return screenshot_data, self.cursor_position
         except Exception as e:
@@ -87,8 +86,7 @@ class iPhoneMirroringAgent:
             self.logger.error(f"Error communicating with Claude: {str(e)}")
             return None
 
-    def run(self, update_screenshot, task_completed, update_status):
-        self.update_screenshot = update_screenshot
+    def run(self, task_completed, update_status):
         self.task_completed = task_completed
         self.update_status = update_status
 

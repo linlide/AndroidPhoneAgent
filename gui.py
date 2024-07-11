@@ -2,19 +2,15 @@ import os
 import json
 import logging
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                             QLabel, QLineEdit, QTextEdit, QGroupBox, QStatusBar,
-                             QSizePolicy, QMessageBox, QComboBox, QDoubleSpinBox, QSpinBox,
-                             QFileDialog)
-from PyQt5.QtGui import QIcon, QPixmap
+                             QLabel, QLineEdit, QTextEdit, QStatusBar,
+                             QMessageBox, QComboBox, QDoubleSpinBox, QSpinBox)
+from PyQt5.QtGui import QIcon, QFont
 from PyQt5.QtCore import Qt, QPoint, QTimer, QThread, pyqtSignal
 import pyautogui
-import base64
 from agent import iPhoneMirroringAgent
 from export_utils import export_conversation
 from constants import (DEFAULT_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, 
                        DEFAULT_MAX_MESSAGES, AVAILABLE_MODELS)
-import screen
-from datetime import datetime
 
 class PasswordLineEdit(QLineEdit):
     def __init__(self, *args, **kwargs):
@@ -22,7 +18,6 @@ class PasswordLineEdit(QLineEdit):
         self.setEchoMode(QLineEdit.Password)
 
 class AgentThread(QThread):
-    update_screenshot_signal = pyqtSignal(str)
     task_completed_signal = pyqtSignal(bool, str)
     update_status_signal = pyqtSignal(str)
 
@@ -31,18 +26,7 @@ class AgentThread(QThread):
         self.agent = agent
 
     def run(self):
-        self.agent.run(self.update_screenshot_signal.emit, self.task_completed_signal.emit, self.update_status_signal.emit)
-
-class ScreenshotThread(QThread):
-    screenshot_taken = pyqtSignal(str)
-    screenshot_error = pyqtSignal(str)
-
-    def run(self):
-        try:
-            screenshot_data, _ = screen.capture_screenshot()
-            self.screenshot_taken.emit(screenshot_data)
-        except Exception as e:
-            self.screenshot_error.emit(str(e))
+        self.agent.run(self.task_completed_signal.emit, self.update_status_signal.emit)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -52,7 +36,7 @@ class MainWindow(QMainWindow):
         
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowMaximizeButtonHint)
         
-        self.setFixedSize(800, 600)
+        self.setFixedSize(300, 600)
         
         self.setStyleSheet("""
             QMainWindow {
@@ -62,7 +46,7 @@ class MainWindow(QMainWindow):
                 background-color: #4CAF50;
                 color: white;
                 border: none;
-                padding: 8px 16px;
+                padding: 6px 12px;
                 border-radius: 4px;
                 font-weight: bold;
             }
@@ -101,35 +85,35 @@ class MainWindow(QMainWindow):
         self.cursor_timer.timeout.connect(self.update_screen_cursor_position)
         self.cursor_timer.start(16)
 
-        self.original_pixmap = None
-
     def init_ui(self):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        self.layout = QHBoxLayout(self.central_widget)
-
-        self.left_layout = QVBoxLayout()
-        self.right_layout = QVBoxLayout()
+        self.layout = QVBoxLayout(self.central_widget)
 
         self.create_input_fields()
-        self.create_screenshot_group()
-
-        self.layout.addLayout(self.left_layout, 1)
-        self.layout.addLayout(self.right_layout, 1)
 
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
+        
+        self.status_label = QLabel()
+        self.status_bar.addWidget(self.status_label, 1)
+        
+        self.cursor_position_label = QLabel()
+        monospace_font = QFont("Monospace")
+        monospace_font.setStyleHint(QFont.Monospace)
+        self.cursor_position_label.setFont(monospace_font)
+        self.status_bar.addPermanentWidget(self.cursor_position_label)
 
     def create_input_fields(self):
         layout = QVBoxLayout()
         layout.setSpacing(2)
-        layout.setContentsMargins(10, 15, 10, 35)
+        layout.setContentsMargins(10, 15, 10, 15)
 
         def add_input_field(label_text, widget):
             layout.addWidget(QLabel(label_text))
-            layout.addSpacing(5)
+            layout.addSpacing(2)
             layout.addWidget(widget)
-            layout.addSpacing(15)
+            layout.addSpacing(10)
 
         self.api_key_input = PasswordLineEdit()
         add_input_field("API Key", self.api_key_input)
@@ -155,15 +139,14 @@ class MainWindow(QMainWindow):
         self.max_messages_input.setValue(DEFAULT_MAX_MESSAGES)
         add_input_field("Max Messages", self.max_messages_input)
 
+        layout.addWidget(QLabel("Task Description"))
+        layout.addSpacing(2)
         self.task_input = QTextEdit()
-        self.task_input.setFixedHeight(100)
-        add_input_field("Task Description", self.task_input)
+        layout.addWidget(self.task_input, 1)  # Set stretch factor to 1 to make it expand
 
-        layout.addSpacing(30)
+        self.layout.addLayout(layout)
 
-        self.left_layout.addLayout(layout)
-
-        self.button_layout = QHBoxLayout()
+        self.button_layout = QVBoxLayout()
         self.start_button = QPushButton("Start Task")
         self.start_button.setIcon(QIcon.fromTheme("media-playback-start"))
         self.start_button.clicked.connect(self.start_task)
@@ -193,73 +176,7 @@ class MainWindow(QMainWindow):
         self.export_button.hide()
         self.button_layout.addWidget(self.export_button)
 
-        self.left_layout.addLayout(self.button_layout)
-
-    def create_screenshot_group(self):
-        self.screenshot_group = QGroupBox("Current Screenshot")
-        self.screenshot_layout = QVBoxLayout()
-        
-        self.screenshot_label = QLabel()
-        self.screenshot_label.setAlignment(Qt.AlignCenter)
-        self.screenshot_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.screenshot_layout.addWidget(self.screenshot_label)
-        
-        self.screenshot_buttons_layout = QHBoxLayout()
-        self.screenshot_button = QPushButton("Take Screenshot")
-        self.screenshot_button.clicked.connect(self.take_current_screenshot)
-        self.screenshot_buttons_layout.addWidget(self.screenshot_button)
-        
-        self.save_screenshot_button = QPushButton("Save Screenshot")
-        self.save_screenshot_button.clicked.connect(self.save_screenshot)
-        self.save_screenshot_button.setDisabled(True)
-        self.screenshot_buttons_layout.addWidget(self.save_screenshot_button)
-        
-        self.screenshot_layout.addLayout(self.screenshot_buttons_layout)
-        
-        self.screenshot_group.setLayout(self.screenshot_layout)
-        self.right_layout.addWidget(self.screenshot_group, 1)
-        
-        self.screen_cursor_label = QLabel("Screen Cursor:     (    0,    0)")
-        self.right_layout.addWidget(self.screen_cursor_label)
-
-    def take_current_screenshot(self):
-        self.screenshot_button.setDisabled(True)
-        self.save_screenshot_button.setDisabled(True)
-        self.set_fields_readonly(True)
-        self.status_bar.showMessage("Taking screenshot...")
-        
-        self.screenshot_thread = ScreenshotThread()
-        self.screenshot_thread.screenshot_taken.connect(self.on_screenshot_taken)
-        self.screenshot_thread.screenshot_error.connect(self.on_screenshot_error)
-        self.screenshot_thread.finished.connect(self.on_screenshot_thread_finished)
-        self.screenshot_thread.start()
-
-    def on_screenshot_taken(self, screenshot_data):
-        self.on_update_screenshot(screenshot_data)
-        self.logger.info("Current screenshot taken")
-        self.status_bar.showMessage("Screenshot updated", 3000)
-        self.set_fields_readonly(False)
-
-    def on_screenshot_error(self, error_message):
-        self.logger.error(f"Error taking current screenshot: {error_message}")
-        QMessageBox.warning(self, "Screenshot Error", f"Failed to take current screenshot: {error_message}")
-        self.set_fields_readonly(False)
-
-    def on_screenshot_thread_finished(self):
-        self.screenshot_button.setDisabled(False)
-
-    def save_screenshot(self):
-        if self.original_pixmap:
-            default_filename = f"screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-            file_path, _ = QFileDialog.getSaveFileName(self, "Save Screenshot", default_filename, "JPEG Files (*.jpg *.jpeg)")
-            
-            if file_path:
-                self.original_pixmap.save(file_path, "JPEG")
-                self.status_bar.showMessage(f"Screenshot saved as {file_path}", 3000)
-                self.logger.info(f"Screenshot saved: {file_path}")
-        else:
-            QMessageBox.warning(self, "No Screenshot", "There is no screenshot to save.")
-            self.logger.warning("Attempted to save screenshot when none available")
+        self.layout.addLayout(self.button_layout)
 
     def load_settings(self):
         if os.path.exists(self.settings_file):
@@ -322,33 +239,32 @@ class MainWindow(QMainWindow):
         self.agent.task_description = task_description
         
         self.agent_thread = AgentThread(self.agent)
-        self.agent_thread.update_screenshot_signal.connect(self.on_update_screenshot)
         self.agent_thread.task_completed_signal.connect(self.on_task_completed)
         self.agent_thread.update_status_signal.connect(self.update_status)
         self.agent_thread.start()
         
         self.update_button_visibility("running")
-        self.status_bar.showMessage("Task started...")
+        self.update_status("Task started...")
         self.logger.info(f"Task started: {task_description}")
 
     def pause_task(self):
         if self.agent and self.agent_thread.isRunning():
             self.agent.pause()
             self.update_button_visibility("paused")
-            self.status_bar.showMessage("Task paused")
+            self.update_status("Task paused")
             self.logger.info("Task paused")
 
     def resume_task(self):
         if self.agent and self.agent.isPaused():
             self.agent.resume()
             self.update_button_visibility("running")
-            self.status_bar.showMessage("Task resumed...")
+            self.update_status("Task resumed...")
             self.logger.info("Task resumed")
 
     def cancel_task(self):
         if self.agent and self.agent_thread.isRunning():
             self.agent.cancel()
-            self.status_bar.showMessage("Cancelling task...")
+            self.update_status("Cancelling task...")
             self.logger.info("Task cancellation requested")
 
     def update_button_visibility(self, state):
@@ -383,30 +299,15 @@ class MainWindow(QMainWindow):
         self.task_input.setDisabled(disabled)
         self.logger.debug(f"Input fields set to disabled: {disabled}")
 
-    def on_update_screenshot(self, screenshot_data):
-        pixmap = QPixmap()
-        pixmap.loadFromData(base64.b64decode(screenshot_data))
-        self.original_pixmap = pixmap
-        self.scale_and_set_pixmap()
-        self.save_screenshot_button.setDisabled(False)
-        self.logger.debug("Screenshot updated")
-
-    def scale_and_set_pixmap(self):
-        if self.original_pixmap:
-            label_width = self.screenshot_label.width()
-            scaled_pixmap = self.original_pixmap.scaledToWidth(label_width, Qt.SmoothTransformation)
-            self.screenshot_label.setPixmap(scaled_pixmap)
-            self.logger.debug("Screenshot scaled and set")
-
     def update_screen_cursor_position(self):
         cursor_x, cursor_y = pyautogui.position()
-        self.screen_cursor_label.setText(f"Screen Cursor:     ({cursor_x:5d},{cursor_y:5d})")
+        self.cursor_position_label.setText(f"({cursor_x:4d},{cursor_y:4d})")
         self.logger.debug(f"Screen cursor position updated: ({cursor_x}, {cursor_y})")
 
     def on_task_completed(self, success, reason):
         self.update_button_visibility("idle")
         status = "completed successfully" if success else "failed"
-        self.status_bar.showMessage(f"Task {status}")
+        self.update_status(f"Task {status}")
 
         if not success:
             QMessageBox.warning(self, "Task Failed", f"The task failed. Reason: {reason}")
@@ -420,11 +321,6 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Agent", "There is no active agent with a conversation to export.")
         self.logger.info("Conversation exported")
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.scale_and_set_pixmap()
-        self.logger.debug("Window resized")
-
     def update_status(self, status):
-        self.status_bar.showMessage(status)
+        self.status_label.setText(f"{status}...")
         self.logger.debug(f"Status updated: {status}")
