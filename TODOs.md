@@ -10,3 +10,5 @@
 7. Add timestamps to each message.
 8. Use icons to represent different types of content (e.g., text, image, tool use).
 9. Support VLMs other than claude.
+
+python3 paligemma_inference.py --image_path Screenshot.png --text "Describe the image" --max_new_tokens 30
