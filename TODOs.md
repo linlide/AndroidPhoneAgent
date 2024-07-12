@@ -12,3 +12,5 @@
 9. Support VLMs other than claude.
 
 python3 paligemma_inference.py --image_path Screenshot.png --text "Describe the image" --max_new_tokens 30
+
+python3 paligemma_inference.py --image_path Screenshot.png --text "button" --task segment --max_new_tokens 30 --output_dir ./output
