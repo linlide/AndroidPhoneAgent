@@ -5,6 +5,7 @@ import pyautogui
 import logging
 from PIL import Image, ImageDraw
 import time
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -28,71 +29,44 @@ def draw_cursor(screenshot, cursor_x, cursor_y):
     
     return screenshot
 
-def compress_image(image, max_size=5*1024*1024, initial_quality=95):
-    img_byte_arr = io.BytesIO()
-    quality = initial_quality
-    image.save(img_byte_arr, format='JPEG', quality=quality)
-    img_byte_arr = img_byte_arr.getvalue()
-    
-    while len(img_byte_arr) > max_size:
-        quality = int(quality * 0.9)
-        img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='JPEG', quality=quality)
-        img_byte_arr = img_byte_arr.getvalue()
-    
-    return img_byte_arr
-
-def capture_screenshot():
+def capture_screenshot(device_type="android"):
     try:
-        logger.info("Capturing screenshot")
-        screenshots_folder = os.path.join(os.path.expanduser("~"), "Dropbox", "Screenshots")
+        # 重启 ADB 服务器
+     #   subprocess.run(['adb', 'kill-server'], check=True)
+      #  time.sleep(1)
+      #  subprocess.run(['adb', 'start-server'], check=True)
+       # time.sleep(2)
+
+        # 等待设备连接
+        #subprocess.run(['adb', 'wait-for-device'], check=True)
         
-        initial_screenshots = set(f for f in os.listdir(screenshots_folder) if f.startswith("Screenshot"))
+        # 获取 UI XML
+        subprocess.run(['adb', 'shell', 'uiautomator', 'dump', '/sdcard/window_dump.xml'], check=True)
+        time.sleep(1)
+        subprocess.run(['adb', 'pull', '/sdcard/window_dump.xml'], check=True)
         
-        pyautogui.hotkey('command', 'shift', '3')
+        with open('window_dump.xml', 'r', encoding='utf-8') as f:
+            ui_xml = f.read()
+
+        # 修改截图命令，不使用 shell=True
+        subprocess.run(['adb', 'shell', 'screencap', '-p', '/sdcard/screenshot.png'], check=True)
+        time.sleep(1)
+        subprocess.run(['adb', 'pull', '/sdcard/screenshot.png'], check=True)
         
-        max_attempts = 3
-        attempt = 0
-        new_screenshot_path = None
-        
-        while attempt < max_attempts:
-            time.sleep(2)
-            current_screenshots = set(f for f in os.listdir(screenshots_folder) if f.startswith("Screenshot"))
-            new_screenshots = current_screenshots - initial_screenshots
+        # 读取并编码图片
+        with open('screenshot.png', 'rb') as f:
+            image_data = f.read()
+            screenshot_data = base64.b64encode(image_data).decode('utf-8')
             
-            if new_screenshots:
-                new_screenshot = max(new_screenshots, key=lambda x: os.path.getmtime(os.path.join(screenshots_folder, x)))
-                new_screenshot_path = os.path.join(screenshots_folder, new_screenshot)
-                logger.info(f"New screenshot found: {new_screenshot_path}")
-                break
-            
-            attempt += 1
-            logger.info(f"No new screenshot found. Attempt {attempt} of {max_attempts}")
+        # 获取屏幕尺寸
+        width, height = get_screen_dimensions(device_type)
+        cursor_position = (width // 2, height // 2)
         
-        if not new_screenshot_path:
-            logger.warning("No new screenshot found after multiple attempts. Taking a new screenshot.")
-            return capture_screenshot()
-        
-        screenshot = Image.open(new_screenshot_path)
-        
-        screenshot = screenshot.resize((screen_width, screen_height), Image.LANCZOS)
-        
-        if screenshot.mode == 'RGBA':
-            screenshot = screenshot.convert('RGB')
-        
-        cursor_x, cursor_y = pyautogui.position()
-        
-        screenshot = draw_cursor(screenshot, cursor_x, cursor_y)
-        
-        img_byte_arr = compress_image(screenshot)
-        
-        base64_screenshot = base64.b64encode(img_byte_arr).decode('utf-8')
-        
-        logger.info(f"Screenshot captured successfully. Cursor position: ({cursor_x}, {cursor_y})")
-        return base64_screenshot, (cursor_x, cursor_y)
+        return screenshot_data, cursor_position, ui_xml
+
     except Exception as e:
-        logger.error(f"Error capturing screenshot: {str(e)}")
-        raise Exception(f"Error capturing screenshot: {str(e)}")
+        logging.error(f"Error capturing screenshot: {str(e)}")
+        return None, None, None
 
 def move_cursor(direction, distance):
     try:
@@ -114,3 +88,20 @@ def click_cursor():
     except Exception as e:
         logger.error(f"Error performing click: {str(e)}")
         raise Exception(f"Error performing click: {str(e)}")
+
+def get_screen_dimensions(device_type):
+    try:
+        # For Android devices, use adb to get screen resolution
+        if device_type.lower() == "android":
+            output = subprocess.check_output(['adb', 'shell', 'wm', 'size'], text=True)
+            # Output format: "Physical size: 1080x1920"
+            size_str = output.strip().split(': ')[1]
+            width, height = map(int, size_str.split('x'))
+            return width, height
+        else:
+            # For other device types, implement appropriate method
+            raise NotImplementedError(f"Screen dimension detection not implemented for {device_type}")
+    except Exception as e:
+        logging.error(f"Error getting screen dimensions: {str(e)}")
+        # Return default dimensions
+        return 1080, 1920

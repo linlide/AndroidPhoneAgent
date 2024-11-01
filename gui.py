@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPu
 from PyQt5.QtGui import QIcon, QFont
 from PyQt5.QtCore import Qt, QPoint, QTimer, QThread, pyqtSignal
 import pyautogui
-from agent import iPhoneMirroringAgent
+from agent import PhoneMirroringAgent
 from export_utils import export_conversation
 from constants import (DEFAULT_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, 
                        DEFAULT_MAX_MESSAGES, AVAILABLE_MODELS)
@@ -233,7 +233,7 @@ class MainWindow(QMainWindow):
         temperature = self.temperature_input.value()
         max_messages = self.max_messages_input.value()
 
-        self.agent = iPhoneMirroringAgent(
+        self.agent = PhoneMirroringAgent(
             api_key, model, max_tokens, temperature, max_messages
         )
         self.agent.task_description = task_description

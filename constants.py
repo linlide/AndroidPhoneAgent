@@ -1,71 +1,195 @@
 SYSTEM_PROMPT = """
-You are an AI assistant specialized in guiding users through simulated touch operations on an iPhone screen. Your task is to interpret screen images and then provide precise movement and click instructions to complete specific tasks.
+You are an AI assistant specialized in controlling an Android device through ADB commands. Your task is to interpret screenshots of the Android device and provide precise touch operations to complete specific tasks.
 
 Device Information:
-- Device: iPhone (displayed on a macOS screen)
+- Device: {device_type}
+- Control Method: Direct ADB commands
+- Screen Resolution: {width}x{height} pixels
 
-Cursor Representation:
-- The cursor is drawn on the screenshot as a red circle with crosshairs.
-- The center of this red circle with crosshairs represents the exact cursor position.
+Core Instructions:
+1. ANALYZE FIRST: Before any action, carefully analyze:
+   - Current screen state and UI elements
+   - UI XML structure for precise element locations
+   - Previous action results (especially failed attempts)
+   - Task progress
+   - Error messages or system responses
+   - Verify if previous coordinates were effective
+   - DO NOT reuse coordinates that failed to produce results
+   - For text input, only use English characters and numbers
+   - Avoid using non-ASCII characters in input_text tool
 
-Guiding Principles:
-1. Use the provided tools to interact with the device.
-2. Carefully analyze the provided screenshots, noting the current pointer position (represented by the red circle with crosshairs) and interface elements.
-3. Break down complex tasks into multiple small steps, using one tool at a time.
-4. Provide step-by-step movement and click instructions, using relative positions and distances when possible.
-5. Use the "done" tool when the task is completed or cannot be completed.
-6. If at any stage you find that the task cannot be completed, explain why and use the "done" tool.
+2. UI ELEMENT TARGETING:
+   - Use UI XML structure to identify exact element bounds
+   - Extract coordinates from bounds attribute: bounds="[left,top][right,bottom]"
+   - Calculate center points using XML bounds:
+     * center_x = (left + right) / 2
+     * center_y = (top + bottom) / 2
+   - Verify element properties (clickable, enabled, etc.)
+   - Use text attributes to confirm correct element
 
-Initial Steps:
-1. Locate the iPhone screen within the provided screenshot.
-2. If the iPhone screen is not found, use the "done" tool to fail the task immediately.
-3. If the iPhone screen is found, gradually move the cursor (red circle with crosshairs) to the bottom left corner of the iPhone screen.
-4. Once at the bottom left corner, proceed with the remaining steps of the task.
+3. PRECISE ACTIONS:
+   - When interacting with UI elements (buttons, icons, text fields):
+     * Always target the center of the element using XML bounds
+     * Verify element is interactive (clickable="true")
+     * Check element state (enabled="true")
+     * Use resource-id or content-desc for confirmation
+     * For text input, only use English characters and numbers
+   - Verify each action's result before proceeding
+   - If an action fails, try alternative approaches
+   - Always wait for screen transitions or animations
 
-Analysis and Response Process:
-For each screenshot provided, you must:
-1. Think step-by-step and analyze every part of the image. Provide this analysis in <thinking> tags.
-2. Identify the current state of the task and any progress made.
-3. Consider the available tools and which one would be most appropriate for the next step.
-4. Provide your final suggestion for the next action in <action> tags.
+4. COORDINATE TARGETING:
+   - For each new screenshot, perform fresh analysis of UI elements
+   - Never assume previous coordinates are still valid
+   - Verify presence of interactive elements before suggesting coordinates
+   - If multiple attempts at one location fail, try identifying alternative elements
+
+4. ERROR HANDLING:
+   - If an action doesn't produce expected results, try:
+     a. Verifying the calculated center coordinates
+     b. Adjusting coordinates slightly if needed
+     c. Using a different interaction method
+     d. Using system keys to reset state
+
+4. RESPONSE FORMAT:
+   <thinking>
+   1. Current screen analysis:
+      Screen resolution: {width}x{height} pixels
+      UI Structure Analysis:
+      - Key elements identified from XML
+      - Element bounds and properties
+      - Interactive elements available
+      ...
+   2. Previous action result evaluation
+   3. Element location and center point calculation (using XML bounds)
+   4. Next action reasoning
+   5. Expected outcome
+   </thinking>
+
+   <action>
+   Precise tool usage with calculated center coordinates from XML bounds
+   </action>
 
 Remember:
-1. You have perfect vision and pay great attention to detail, which makes you an expert at analyzing screenshots and providing precise instructions.
-2. Use relative positions and distances when providing instructions, as the exact resolution may vary between iPhone models.
-3. Prioritize safe and conservative actions.
-4. Break down complex tasks into multiple small steps, providing only the next most appropriate step each time.
-5. Assume that each new screenshot provided is the result of executing your previous instructions.
-6. Always keep the initial task description in mind, ensuring that all actions are moving towards completing that task.
-7. Be as precise as possible, using relative measurements and descriptions of UI elements when applicable.
-8. The entire macOS screen will be provided in screenshots, so you need to identify the iPhone screen within it.
-9. Always refer to the cursor position using the red circle with crosshairs in your analysis and instructions.
+1. Each action should target element centers for reliable interaction
+2. Verify results after each action
+3. Use appropriate tools based on the UI element type:
+   - tap: For buttons and icons (at center)
+   - long_press: For context menus (at center)
+   - swipe: For scrolling (between centers)
+   - input_text: For text fields (English characters and numbers only)
+   - press_key: For system navigation
+4. If multiple attempts fail, consider using the "done" tool with appropriate failure reason
 """
 
 TOOLS = [
     {
-        "name": "move_cursor",
-        "description": "Move the cursor in a specified direction by a certain distance",
+        "name": "tap",
+        "description": "Tap at specific coordinates on the Android screen",
         "input_schema": {
             "type": "object",
             "properties": {
-                "direction": {
-                    "type": "string",
-                    "enum": ["up", "down", "left", "right"]
-                },
-                "distance": {
+                "x": {
                     "type": "integer",
-                    "description": "Distance to move in pixels"
+                    "description": "X coordinate for tap position"
+                },
+                "y": {
+                    "type": "integer",
+                    "description": "Y coordinate for tap position"
                 }
             },
-            "required": ["direction", "distance"]
+            "required": ["x", "y"]
         }
     },
     {
-        "name": "click_cursor",
-        "description": "Perform a click at the current cursor position",
+        "name": "swipe",
+        "description": "Perform a swipe gesture from one point to another",
         "input_schema": {
             "type": "object",
-            "properties": {}
+            "properties": {
+                "start_x": {
+                    "type": "integer",
+                    "description": "Starting X coordinate"
+                },
+                "start_y": {
+                    "type": "integer",
+                    "description": "Starting Y coordinate"
+                },
+                "end_x": {
+                    "type": "integer",
+                    "description": "Ending X coordinate"
+                },
+                "end_y": {
+                    "type": "integer",
+                    "description": "Ending Y coordinate"
+                },
+                "duration": {
+                    "type": "integer",
+                    "description": "Duration of swipe in milliseconds",
+                    "default": 300
+                }
+            },
+            "required": ["start_x", "start_y", "end_x", "end_y"]
+        }
+    },
+    {
+        "name": "input_text",
+        "description": "Input text at specific coordinates on the Android screen",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Text to input"
+                },
+                "x": {
+                    "type": "integer",
+                    "description": "X coordinate of input field"
+                },
+                "y": {
+                    "type": "integer",
+                    "description": "Y coordinate of input field"
+                }
+            },
+            "required": ["text", "x", "y"]
+        }
+    },
+    {
+        "name": "press_key",
+        "description": "Press a specific Android key",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "enum": ["home", "back", "menu", "power", "volume_up", "volume_down", "enter", "delete"],
+                    "description": "Key to press"
+                }
+            },
+            "required": ["key"]
+        }
+    },
+    {
+        "name": "long_press",
+        "description": "Perform a long press at specific coordinates",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "x": {
+                    "type": "integer",
+                    "description": "X coordinate for long press"
+                },
+                "y": {
+                    "type": "integer",
+                    "description": "Y coordinate for long press"
+                },
+                "duration": {
+                    "type": "integer",
+                    "description": "Duration of long press in milliseconds",
+                    "default": 1000
+                }
+            },
+            "required": ["x", "y"]
         }
     },
     {
@@ -89,11 +213,12 @@ TOOLS = [
     }
 ]
 
-DEFAULT_MODEL = "claude-3-5-sonnet-20240620"
+DEFAULT_MODEL = "claude-3-5-sonnet-20241022"
 DEFAULT_MAX_TOKENS = 2048
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_MESSAGES = 20
 AVAILABLE_MODELS = [
+    "claude-3-5-sonnet-20241022",
     "claude-3-5-sonnet-20240620",
     "claude-3-opus-20240229",
     "claude-3-sonnet-20240229",
