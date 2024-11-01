@@ -7,7 +7,7 @@ def setup_logging():
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     3
-    file_handler = logging.FileHandler('iphone_mirroring_agent.log')
+    file_handler = logging.FileHandler('phone_mirroring_agent.log')
     file_handler.setLevel(logging.INFO)
     
     stream_handler = logging.StreamHandler(sys.stdout)

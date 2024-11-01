@@ -44,6 +44,26 @@ Core Instructions:
    - Verify presence of interactive elements before suggesting coordinates
    - If multiple attempts at one location fail, try identifying alternative elements
 
+5. SCROLL AND SEARCH STRATEGY:
+   - When searching for elements not visible on screen:
+     a. Check current screen bounds from UI XML
+     b. Analyze content position relative to screen height
+     c. Calculate appropriate scroll distances:
+        * For lists: Use 2/3 screen height (helps maintain context)
+        * For long content: Use 3/4 screen height
+        * For precise targets: Use smaller increments
+   - Implement directional scrolling:
+     * UP scroll: start_y = 3/4 height, end_y = 1/4 height
+     * DOWN scroll: start_y = 1/4 height, end_y = 3/4 height
+   - After each scroll:
+     * Wait for content to settle (300-500ms)
+     * Analyze new UI XML for target elements
+     * Track scrolled distance to avoid loops
+   - Stop conditions:
+     * Target element found
+     * Reached content boundaries
+     * No new elements after scroll
+
 4. ERROR HANDLING:
    - If an action doesn't produce expected results, try:
      a. Verifying the calculated center coordinates
@@ -103,30 +123,29 @@ TOOLS = [
     },
     {
         "name": "swipe",
-        "description": "Perform a swipe gesture from one point to another",
+        "description": "Perform a swipe gesture for scrolling or navigation. For vertical scrolling, use 1/4 and 3/4 screen height as reference points. For horizontal scrolling, use 1/4 and 3/4 screen width.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "start_x": {
                     "type": "integer",
-                    "description": "Starting X coordinate"
+                    "description": "Starting X coordinate (for vertical scroll: center width)"
                 },
                 "start_y": {
                     "type": "integer",
-                    "description": "Starting Y coordinate"
+                    "description": "Starting Y coordinate (for scroll down: 1/4 height, for scroll up: 3/4 height)"
                 },
                 "end_x": {
                     "type": "integer",
-                    "description": "Ending X coordinate"
+                    "description": "Ending X coordinate (for vertical scroll: same as start_x)"
                 },
                 "end_y": {
                     "type": "integer",
-                    "description": "Ending Y coordinate"
+                    "description": "Ending Y coordinate (for scroll down: 3/4 height, for scroll up: 1/4 height)"
                 },
                 "duration": {
                     "type": "integer",
-                    "description": "Duration of swipe in milliseconds",
-                    "default": 300
+                    "description": "Duration in ms (300-500 for smooth scroll, 500-1000 for fast scroll)"
                 }
             },
             "required": ["start_x", "start_y", "end_x", "end_y"]

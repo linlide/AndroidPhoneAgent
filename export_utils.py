@@ -28,7 +28,7 @@ def export_conversation(parent, agent):
         QMessageBox.warning(parent, "No Conversation", "There is no conversation to export.")
         return
 
-    default_folder_name = f"iphone_mirroring_conversation_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    default_folder_name = f"phone_mirroring_conversation_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     folder_path = QFileDialog.getExistingDirectory(parent, "Select Export Folder", "", QFileDialog.ShowDirsOnly)
     
     if not folder_path:

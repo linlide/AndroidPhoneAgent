@@ -1,6 +1,6 @@
 # Android Phone Agent
 
-The Android Phone Agent is a Python-based tool that uses Claude AI to automate interactions with Android devices. Modified from the iPhoneMirroringAgent project, it captures screenshots, analyzes them using Claude AI, and performs simulated touch operations based on AI-generated instructions.
+The Android Phone Agent is a Python-based tool that uses Claude AI to automate interactions with Android devices. Modified from the AndroidPhoneAgent project, it captures screenshots, analyzes them using Claude AI, and performs simulated touch operations based on AI-generated instructions.
 
 ![Android Phone Agent Screenshot](Screenshot.png)
 

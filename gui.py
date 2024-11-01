@@ -32,7 +32,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger(__name__)
-        self.setWindowTitle("iPhone Mirroring Agent")
+        self.setWindowTitle("Android Phone Agent")
         
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowMaximizeButtonHint)
         
